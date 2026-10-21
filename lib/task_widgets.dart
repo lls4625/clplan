@@ -1,0 +1,274 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+import 'app_controller.dart';
+import 'models.dart';
+
+class TaskCard extends StatelessWidget {
+  const TaskCard({
+    super.key,
+    required this.task,
+    required this.controller,
+    required this.onTap,
+    this.onAddSubtask,
+    this.nested = false,
+  });
+  final TaskItem task;
+  final AppController controller;
+  final VoidCallback onTap;
+  final VoidCallback? onAddSubtask;
+  final bool nested;
+
+  Future<void> _deleteTask(BuildContext context) async {
+    if (controller.childrenOf(task.id).isNotEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('请先删除或移走该主任务下的子任务。')));
+      return;
+    }
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('删除任务？'),
+            content: Text('确定删除“${task.title}”吗？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('删除'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+    try {
+      await controller.deleteTask(task);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final legacyStatus = controller.statusOf(task.statusId);
+    final progressNode = task.progress?.currentNode;
+    final parent = controller.taskById(task.parentTaskId);
+    final contactText = task.contacts.isEmpty
+        ? task.contact.trim()
+        : task.contacts
+              .map(
+                (contact) => [
+                  contact.name,
+                  contact.phone,
+                ].where((value) => value.trim().isNotEmpty).join(' '),
+              )
+              .where((value) => value.isNotEmpty)
+              .join('、');
+    return Padding(
+      padding: EdgeInsets.only(left: nested ? 20 : 0, bottom: 8),
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(15),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (nested)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 8, top: 2),
+                        child: Icon(Icons.subdirectory_arrow_right, size: 18),
+                      ),
+                    if (task.reminderEnabled && task.reminders.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 7, top: 1),
+                        child: Icon(
+                          task.reminders.any(
+                                (item) =>
+                                    item.deliveryType ==
+                                    ReminderDeliveryType.alarm,
+                              )
+                              ? Icons.alarm_outlined
+                              : Icons.notifications_none,
+                          size: 19,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    Expanded(
+                      child: Text(
+                        task.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _StatusBadge(
+                      name: progressNode?.name ?? legacyStatus.name,
+                      color: progressNode?.color ?? legacyStatus.color,
+                    ),
+                  ],
+                ),
+                if (parent != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5),
+                    child: Text(
+                      '主任务：${parent.title}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                if (task.description.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      task.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                if (task.type.isNotEmpty || contactText.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Wrap(
+                      spacing: 12,
+                      children: [
+                        if (task.type.isNotEmpty)
+                          Text(
+                            '◇ ${task.type}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        if (contactText.isNotEmpty)
+                          Text(
+                            '♙ $contactText',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                      ],
+                    ),
+                  ),
+                if (task.tags.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Wrap(
+                      spacing: 5,
+                      runSpacing: 4,
+                      children: task.tags.take(4).map((tag) {
+                        TaskTagSnapshot? snapshot;
+                        for (final item in task.tagSnapshots) {
+                          if (item.name == tag) snapshot = item;
+                        }
+                        final definition = controller.tagDefinitionForName(tag);
+                        final color = snapshot == null
+                            ? definition?.color
+                            : Color(snapshot.colorValue);
+                        final icon = snapshot == null
+                            ? definition?.icon
+                            : taskTagIcons[snapshot.iconName];
+                        return Chip(
+                          avatar: Icon(
+                            icon ?? Icons.history,
+                            size: 16,
+                            color: color,
+                          ),
+                          label: Text(tag),
+                          side: color == null ? null : BorderSide(color: color),
+                          backgroundColor: color?.withAlpha(24),
+                          visualDensity: VisualDensity.compact,
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              task.startDate.isEmpty
+                                  ? '尚未安排日期'
+                                  : '${task.startDate}${task.startTime.isEmpty ? '' : ' ${task.startTime}'}',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontSize: 12,
+                              ),
+                            ),
+                            if (task.completedAt != null)
+                              Text(
+                                '完成于 ${DateFormat('yyyy-MM-dd HH:mm').format(task.completedAt!.toLocal())}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (onAddSubtask != null &&
+                          task.parentTaskId == null &&
+                          !controller.isDone(task))
+                        IconButton(
+                          tooltip: '新增子任务',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: onAddSubtask,
+                          icon: const Icon(Icons.add_task_outlined, size: 20),
+                        ),
+                      IconButton(
+                        tooltip: '删除任务',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _deleteTask(context),
+                        icon: const Icon(Icons.delete_outline, size: 20),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.name, required this.color});
+  final String name;
+  final Color color;
+  @override
+  Widget build(BuildContext context) => Container(
+    constraints: const BoxConstraints(maxWidth: 90),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      border: Border.all(color: color),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      name,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(color: color, fontSize: 11),
+    ),
+  );
+}
+
+String dateOnly(DateTime date) =>
+    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+DateTime dateFromText(String value) =>
+    DateTime.tryParse(value) ?? DateTime.now();

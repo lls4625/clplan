@@ -1,0 +1,688 @@
+import 'package:characters/characters.dart';
+import 'package:flutter/material.dart';
+
+import 'app_database.dart';
+import 'alarm_service.dart';
+import 'models.dart';
+import 'notification_service.dart';
+
+class AppController extends ChangeNotifier {
+  AppController(this.db)
+    : notifications = NotificationService(db),
+      alarms = AlarmService(db);
+
+  final AppDatabase db;
+  final NotificationService notifications;
+  final AlarmService alarms;
+  bool loading = true;
+  String? error;
+  List<TaskItem> tasks = [];
+  List<TaskStatus> statuses = [];
+  List<TaskTagDefinition> tagDefinitions = [];
+  List<ContactEntry> contacts = [];
+  List<CategoryDefinition> categoryDefinitions = [];
+  List<ProgressTemplate> progressTemplates = [];
+  List<PlanItem> plans = [];
+  List<ColumnPreference> columns = [];
+  AppPreferences preferences = const AppPreferences();
+  ReminderPermissionState reminderPermission =
+      ReminderPermissionState.unsupported;
+  AlarmPermissionState alarmPermission = AlarmPermissionState.unsupported;
+  int scheduledReminderCount = 0;
+  int waitingReminderCount = 0;
+  int failedReminderCount = 0;
+  int scheduledAlarmCount = 0;
+  int inactiveAlarmCount = 0;
+  int failedAlarmCount = 0;
+  String? pendingTaskToOpen;
+
+  Future<void> initialize() async {
+    try {
+      try {
+        await notifications.initialize(_handleNotificationAction);
+      } catch (_) {
+        // Notification availability must not prevent access to local task data.
+      }
+      await db.materializeRecurringTasks();
+      await reload();
+      final pendingAction = notifications.takePendingAction();
+      if (pendingAction != null) await _handleNotificationAction(pendingAction);
+      await _reconcileReminders();
+    } catch (exception) {
+      error = exception.toString();
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> reload() async {
+    statuses = await db.getStatuses();
+    tagDefinitions = await db.getTagDefinitions();
+    contacts = await db.getContacts();
+    categoryDefinitions = await db.getCategoryDefinitions();
+    progressTemplates = await db.getProgressTemplates();
+    plans = await db.getPlans();
+    tasks = await db.getTasks();
+    preferences = await db.getPreferences();
+    columns = await db.getColumns();
+    loading = false;
+    error = null;
+    notifyListeners();
+  }
+
+  TaskStatus statusOf(String id) => statuses.firstWhere(
+    (status) => status.id == id,
+    orElse: () => statuses.first,
+  );
+
+  bool isDone(TaskItem task) =>
+      task.progress?.completed ?? statusOf(task.statusId).completed;
+
+  CategoryDefinition? categoryDefinitionForName(String name) {
+    for (final category in categoryDefinitions) {
+      if (category.name == name) return category;
+    }
+    return null;
+  }
+
+  TaskTagDefinition? tagDefinitionForName(String name) {
+    for (final tag in tagDefinitions) {
+      if (tag.name == name) return tag;
+    }
+    return null;
+  }
+
+  TaskItem _withSnapshots(TaskItem task) {
+    var next = task;
+    if (next.progress == null && progressTemplates.isNotEmpty) {
+      var snapshot = progressSnapshotForTask(next.id);
+      final legacyCompleted = statusOf(next.statusId).completed;
+      if (legacyCompleted) {
+        final end = snapshot.nodes.firstWhere(
+          (node) => node.kind == ProgressNodeKind.end,
+          orElse: () => snapshot.nodes.last,
+        );
+        snapshot = snapshot.copyWith(currentNodeId: end.id);
+      }
+      next = next.copyWith(progress: snapshot);
+    }
+    final category = categoryDefinitionForName(next.type);
+    if (category != null && next.sourceCategoryId == null) {
+      next = next.copyWith(
+        sourceCategoryId: category.id,
+        categoryColorValue: category.colorValue,
+        categoryIconName: category.iconName,
+      );
+    }
+    if (next.tagSnapshots.isEmpty && next.tags.isNotEmpty) {
+      next = next.copyWith(
+        tagSnapshots: next.tags.map((name) {
+          final definition = tagDefinitionForName(name);
+          return TaskTagSnapshot(
+            sourceTagId: definition?.id,
+            name: name,
+            colorValue: definition?.colorValue ?? 0xff8e8e93,
+            iconName: definition?.iconName ?? 'label',
+          );
+        }).toList(),
+      );
+    }
+    return next;
+  }
+
+  List<TaskItem> childrenOf(String parentId) =>
+      tasks.where((task) => task.parentTaskId == parentId).toList()
+        ..sort(compareTasks);
+
+  TaskItem? taskById(String? id) {
+    if (id == null) return null;
+    for (final task in tasks) {
+      if (task.id == id) return task;
+    }
+    return null;
+  }
+
+  int compareTasks(TaskItem a, TaskItem b) {
+    final dateCompare = (a.startDate.isEmpty ? '9999' : a.startDate).compareTo(
+      b.startDate.isEmpty ? '9999' : b.startDate,
+    );
+    if (dateCompare != 0) return dateCompare;
+    final timeCompare = (a.startTime.isEmpty ? '99' : a.startTime).compareTo(
+      b.startTime.isEmpty ? '99' : b.startTime,
+    );
+    if (timeCompare != 0) return timeCompare;
+    return a.title.compareTo(b.title);
+  }
+
+  Future<void> saveTask(
+    TaskItem task, {
+    String? followup,
+    List<String> history = const [],
+  }) async {
+    if (task.title.trim().characters.length > 100) {
+      throw StateError('任务名称最多 100 个字符。');
+    }
+    if (task.description.characters.length > 200) {
+      throw StateError('任务内容最多 200 个字符。');
+    }
+    if (task.planId == null && taskById(task.id) == null) {
+      throw StateError('任务必须从计划详情中新增。');
+    }
+    if (task.planId != null && !plans.any((plan) => plan.id == task.planId)) {
+      throw StateError('任务所属的计划不存在。');
+    }
+    if (task.parentTaskId != null) {
+      final parent = taskById(task.parentTaskId);
+      if (parent == null) throw StateError('选择的主任务不存在。');
+      if (parent.parentTaskId != null) throw StateError('当前版本只支持一层子任务。');
+      if (parent.id == task.id) throw StateError('任务不能成为自己的子任务。');
+    }
+    var next = _withSnapshots(task);
+    if (next.contacts.isEmpty && next.contact.trim().isNotEmpty) {
+      final contact = await saveContact(name: next.contact, phone: '');
+      next = next.copyWith(contacts: [contact]);
+    }
+    await db.saveTask(next, followup: followup, history: history);
+    await reload();
+    final activeReminders = next.reminderEnabled && !isDone(next)
+        ? next.reminders
+        : const <TaskReminderRule>[];
+    await _reconcileReminders(
+      requestNotificationPermission: activeReminders.any(
+        (item) => item.deliveryType == ReminderDeliveryType.notification,
+      ),
+      requestAlarmPermission: activeReminders.any(
+        (item) => item.deliveryType == ReminderDeliveryType.alarm,
+      ),
+    );
+  }
+
+  Future<ContactEntry> saveContact({
+    String? id,
+    required String name,
+    required String phone,
+    String remark = '',
+  }) async {
+    final trimmedName = name.trim();
+    final trimmedPhone = phone.trim();
+    final trimmedRemark = remark.trim();
+    if (trimmedName.isEmpty) throw StateError('请输入联系人。');
+    if (trimmedRemark.characters.length > maxContactRemarkLength) {
+      throw StateError('联系人备注最多 $maxContactRemarkLength 个字符。');
+    }
+    for (final contact in contacts) {
+      if (contact.name.toLowerCase() == trimmedName.toLowerCase() &&
+          contact.phone == trimmedPhone) {
+        if (contact.id == id) continue;
+        if (id == null) return contact;
+        throw StateError('相同姓名和电话的联系人已存在。');
+      }
+    }
+    final contact = ContactEntry(
+      id: id ?? 'contact-${DateTime.now().microsecondsSinceEpoch}',
+      name: trimmedName,
+      phone: trimmedPhone,
+      remark: trimmedRemark,
+    );
+    await db.saveContact(contact);
+    await reload();
+    return contact;
+  }
+
+  Future<void> deleteContact(String id) async {
+    await db.deleteContact(id);
+    await reload();
+  }
+
+  Future<void> deleteTask(TaskItem task) async {
+    final children = childrenOf(task.id);
+    if (children.isNotEmpty) throw StateError('请先删除或移走该主任务下的子任务。');
+    await notifications.cancelTask(task.id);
+    await alarms.cancelOwner('task', task.id);
+    await db.deleteTask(task.id);
+    await reload();
+    await _reconcileReminders();
+  }
+
+  Future<void> setPreference(String key, String value) async {
+    await db.savePreference(key, value);
+    preferences = switch (key) {
+      'theme' => preferences.copyWith(theme: value),
+      'font' => preferences.copyWith(font: value),
+      'language' => preferences.copyWith(language: value),
+      'calendar_density' => preferences.copyWith(calendarDensity: value),
+      'default_reminder_minutes' => preferences.copyWith(
+        defaultReminderMinutes: int.tryParse(value) ?? -1,
+      ),
+      'reminder_sound' => preferences.copyWith(reminderSound: value == 'true'),
+      _ => preferences,
+    };
+    notifyListeners();
+    if (key == 'reminder_sound') await _reconcileReminders();
+  }
+
+  Future<void> saveCalendarDensityHeights({
+    required double small,
+    required double medium,
+    required double large,
+  }) async {
+    double limited(double value) => value
+        .clamp(
+          AppPreferences.minimumCalendarRowHeight,
+          AppPreferences.maximumCalendarRowHeight,
+        )
+        .toDouble();
+
+    final smallHeight = limited(small);
+    final mediumHeight = limited(medium);
+    final largeHeight = limited(large);
+    await db.savePreference('calendar_small_height', '$smallHeight');
+    await db.savePreference('calendar_medium_height', '$mediumHeight');
+    await db.savePreference('calendar_large_height', '$largeHeight');
+    preferences = preferences.copyWith(
+      calendarSmallHeight: smallHeight,
+      calendarMediumHeight: mediumHeight,
+      calendarLargeHeight: largeHeight,
+    );
+    notifyListeners();
+  }
+
+  Future<void> saveStatus(TaskStatus status) async {
+    await db.saveStatus(status);
+    await reload();
+  }
+
+  Future<void> saveTagDefinition(TaskTagDefinition tag) async {
+    final name = tag.name.trim();
+    if (name.isEmpty) throw StateError('标签名称不能为空。');
+    TaskTagDefinition? existing;
+    for (final item in tagDefinitions) {
+      if (item.id == tag.id) existing = item;
+    }
+    if (existing == null && tagDefinitions.length >= maxTagDefinitionCount) {
+      throw StateError('标签最多 $maxTagDefinitionCount 个。');
+    }
+    if (name.characters.length > maxTagNameLength && existing?.name != name) {
+      throw StateError('标签名称最多 $maxTagNameLength 个字符。');
+    }
+    if (existing?.isQuadrant == true && name != existing!.name) {
+      throw StateError('四象限默认标签不能修改名称。');
+    }
+    final duplicate = tagDefinitions.any(
+      (item) =>
+          item.id != tag.id && item.name.toLowerCase() == name.toLowerCase(),
+    );
+    if (duplicate) throw StateError('标签名称不能重复。');
+    await db.saveTagDefinition(tag.copyWith(name: name));
+    await reload();
+  }
+
+  Future<void> saveCategoryDefinition(CategoryDefinition category) async {
+    final name = category.name.trim();
+    if (name.isEmpty) throw StateError('分类名称不能为空。');
+    CategoryDefinition? existing;
+    for (final item in categoryDefinitions) {
+      if (item.id == category.id) existing = item;
+    }
+    if (existing == null &&
+        categoryDefinitions.length >= maxCategoryDefinitionCount) {
+      throw StateError('分类最多 $maxCategoryDefinitionCount 个。');
+    }
+    if (name.characters.length > maxCategoryNameLength &&
+        existing?.name != name) {
+      throw StateError('分类名称最多 $maxCategoryNameLength 个字符。');
+    }
+    final duplicate = categoryDefinitions.any(
+      (item) =>
+          item.id != category.id &&
+          item.name.toLowerCase() == name.toLowerCase(),
+    );
+    if (duplicate) throw StateError('分类名称不能重复。');
+    await db.saveCategoryDefinition(category.copyWith(name: name));
+    await reload();
+  }
+
+  Future<void> deleteCategoryDefinition(String id) async {
+    await db.deleteCategoryDefinition(id);
+    await reload();
+  }
+
+  Future<void> saveProgressTemplate(ProgressTemplate template) async {
+    final name = template.name.trim();
+    if (name.isEmpty) throw StateError('进度方案名称不能为空。');
+    ProgressTemplate? existing;
+    for (final item in progressTemplates) {
+      if (item.id == template.id) existing = item;
+    }
+    if (existing == null &&
+        progressTemplates.length >= maxProgressTemplateCount) {
+      throw StateError('进度方案最多 $maxProgressTemplateCount 套。');
+    }
+    if (name.characters.length > maxProgressTemplateNameLength &&
+        existing?.name != name) {
+      throw StateError('进度方案名称最多 $maxProgressTemplateNameLength 个字符。');
+    }
+    if (template.nodes.length > maxProgressNodeCount) {
+      throw StateError('每套进度方案最多 $maxProgressNodeCount 个节点。');
+    }
+    for (final node in template.nodes) {
+      ProgressNode? existingNode;
+      if (existing != null) {
+        for (final item in existing.nodes) {
+          if (item.id == node.id) existingNode = item;
+        }
+      }
+      if (node.name.characters.length > maxProgressNodeNameLength &&
+          existingNode?.name != node.name) {
+        throw StateError('进度节点名称最多 $maxProgressNodeNameLength 个字符。');
+      }
+    }
+    if (template.nodes
+            .where((node) => node.kind == ProgressNodeKind.start)
+            .length !=
+        1) {
+      throw StateError('每套进度必须且只能有一个开始节点。');
+    }
+    if (!template.nodes.any((node) => node.kind == ProgressNodeKind.end)) {
+      throw StateError('每套进度至少需要一个结束节点。');
+    }
+    final duplicate = progressTemplates.any(
+      (item) =>
+          item.id != template.id &&
+          item.name.toLowerCase() == name.toLowerCase(),
+    );
+    if (duplicate) throw StateError('进度方案名称不能重复。');
+    await db.saveProgressTemplate(template.copyWith(name: name));
+    await reload();
+  }
+
+  Future<bool> deleteProgressTemplate(String id) async {
+    if (progressTemplates.length <= 1) return false;
+    await db.deleteProgressTemplate(id);
+    await reload();
+    return true;
+  }
+
+  ProgressSnapshot progressSnapshotForTask(
+    String taskId, {
+    String? templateId,
+  }) {
+    final template = progressTemplates.firstWhere(
+      (item) => item.id == templateId,
+      orElse: () => progressTemplates.first,
+    );
+    final instanceId = 'task-progress-$taskId';
+    final nodes = template.nodes
+        .map(
+          (node) => ProgressNode(
+            id: '$instanceId-${node.id}',
+            name: node.name,
+            colorValue: node.colorValue,
+            kind: node.kind,
+            sortOrder: node.sortOrder,
+          ),
+        )
+        .toList();
+    final start = nodes.firstWhere(
+      (node) => node.kind == ProgressNodeKind.start,
+      orElse: () => nodes.first,
+    );
+    return ProgressSnapshot(
+      instanceId: instanceId,
+      sourceTemplateId: template.id,
+      templateName: template.name,
+      currentNodeId: start.id,
+      nodes: nodes,
+    );
+  }
+
+  ProgressSnapshot progressSnapshot(String instanceId, {String? templateId}) {
+    final template = progressTemplates.firstWhere(
+      (item) => item.id == templateId,
+      orElse: () => progressTemplates.first,
+    );
+    final nodes = template.nodes
+        .map(
+          (node) => ProgressNode(
+            id: '$instanceId-${node.id}',
+            name: node.name,
+            colorValue: node.colorValue,
+            kind: node.kind,
+            sortOrder: node.sortOrder,
+          ),
+        )
+        .toList();
+    final start = nodes.firstWhere(
+      (node) => node.kind == ProgressNodeKind.start,
+      orElse: () => nodes.first,
+    );
+    return ProgressSnapshot(
+      instanceId: instanceId,
+      sourceTemplateId: template.id,
+      templateName: template.name,
+      currentNodeId: start.id,
+      nodes: nodes,
+    );
+  }
+
+  Future<void> savePlan(PlanItem plan) async {
+    if (plan.name.trim().isEmpty) throw StateError('计划名称不能为空。');
+    if (plan.name.trim().characters.length > 100) {
+      throw StateError('计划名称最多 100 个字符。');
+    }
+    if (plan.description.characters.length > 200) {
+      throw StateError('计划内容最多 200 个字符。');
+    }
+    if (plan.startDate.compareTo(plan.targetDate) > 0) {
+      throw StateError('计划开始日期不能晚于目标日期。');
+    }
+    for (final rule in plan.rules) {
+      if (rule.startDate.compareTo(rule.endDate) > 0) {
+        throw StateError('重复任务的开始日期不能晚于结束日期。');
+      }
+    }
+    await db.savePlan(plan);
+    await reload();
+    final activeReminders = plan.reminderEnabled
+        ? plan.reminders
+        : const <TaskReminderRule>[];
+    await _reconcileReminders(
+      requestNotificationPermission: activeReminders.any(
+        (item) => item.deliveryType == ReminderDeliveryType.notification,
+      ),
+      requestAlarmPermission: activeReminders.any(
+        (item) => item.deliveryType == ReminderDeliveryType.alarm,
+      ),
+    );
+  }
+
+  Future<void> deletePlan(String id) async {
+    if (tasks.any((task) => task.planId == id)) {
+      throw StateError('请先删除该计划内的任务。');
+    }
+    await notifications.cancelTask(id);
+    await alarms.cancelOwner('plan', id);
+    await db.deletePlan(id);
+    await reload();
+    await _reconcileReminders();
+  }
+
+  Future<void> refreshNotifications() => _reconcileReminders();
+
+  Future<bool> requestReminderPermission() async {
+    final granted = await notifications.requestPermission();
+    await _reconcileReminders();
+    return granted;
+  }
+
+  Future<AlarmPermissionState> requestAlarmPermission() async {
+    final state = await alarms.requestPermission();
+    await _reconcileReminders();
+    return state;
+  }
+
+  Future<bool> openReminderSettings() =>
+      notifications.openNotificationSettings();
+
+  Future<bool> openAlarmSettings() => alarms.openSettings();
+
+  String? takePendingTaskToOpen() {
+    final value = pendingTaskToOpen;
+    pendingTaskToOpen = null;
+    return value;
+  }
+
+  Future<void> _reconcileReminders({
+    bool requestNotificationPermission = false,
+    bool requestAlarmPermission = false,
+  }) async {
+    await notifications.reconcileAll(
+      tasks,
+      plans,
+      isDone: isDone,
+      sound: preferences.reminderSound,
+      requestPermission: requestNotificationPermission,
+    );
+    await alarms.reconcileAll(
+      tasks,
+      plans,
+      isDone: isDone,
+      requestPermission: requestAlarmPermission,
+    );
+    reminderPermission = await notifications.permissionState();
+    alarmPermission = await alarms.permissionState();
+    final jobs = await db.getNotificationJobs();
+    scheduledReminderCount = jobs
+        .where((job) => job.state == 'scheduled')
+        .length;
+    waitingReminderCount = jobs
+        .where(
+          (job) =>
+              job.state == 'waiting_window' ||
+              job.state == 'permission_disabled',
+        )
+        .length;
+    failedReminderCount = jobs.where((job) => job.state == 'failed').length;
+    final alarmJobs = await db.getAlarmJobs();
+    scheduledAlarmCount = alarmJobs
+        .where((job) => job.state == 'scheduled')
+        .length;
+    inactiveAlarmCount = alarmJobs
+        .where(
+          (job) =>
+              job.state == 'permission_disabled' || job.state == 'unsupported',
+        )
+        .length;
+    failedAlarmCount = alarmJobs.where((job) => job.state == 'failed').length;
+    notifyListeners();
+  }
+
+  Future<void> _handleNotificationAction(
+    ReminderNotificationAction action,
+  ) async {
+    final task = taskById(action.taskId);
+    if (task == null) return;
+    if (action.actionId == NotificationService.completeAction) {
+      final end = task.progress?.nodes.firstWhere(
+        (node) => node.kind == ProgressNodeKind.end,
+        orElse: () => task.progress!.nodes.last,
+      );
+      final completedStatus = statuses.firstWhere(
+        (status) => status.completed,
+        orElse: () => statuses.last,
+      );
+      await saveTask(
+        task.copyWith(
+          statusId: completedStatus.id,
+          completedAt: DateTime.now(),
+          progress: end == null
+              ? task.progress
+              : task.progress?.copyWith(currentNodeId: end.id),
+          updatedAt: DateTime.now(),
+        ),
+        history: const ['通过提醒通知完成任务'],
+      );
+      return;
+    }
+    if (action.actionId == NotificationService.snoozeAction) {
+      final now = DateTime.now();
+      final snooze = TaskReminderRule(
+        id: 'reminder-${now.microsecondsSinceEpoch}',
+        taskId: task.id,
+        type: ReminderRuleType.absolute,
+        absoluteAt: now.add(const Duration(minutes: 10)),
+        sortOrder: task.reminders.length,
+      );
+      await saveTask(
+        task.copyWith(
+          reminderEnabled: true,
+          reminders: [...task.reminders, snooze],
+          updatedAt: now,
+        ),
+        history: const ['通过通知设置 10 分钟后再次提醒'],
+      );
+      return;
+    }
+    pendingTaskToOpen = task.id;
+    notifyListeners();
+  }
+
+  Future<void> deleteTagDefinition(String id) async {
+    if (tagDefinitions.any((tag) => tag.id == id && tag.isQuadrant)) {
+      throw StateError('四象限默认标签不能删除。');
+    }
+    await db.deleteTagDefinition(id);
+    await reload();
+  }
+
+  Future<bool> deleteStatus(String id) async {
+    if (statuses.length <= 1) return false;
+    final deleted = await db.deleteStatus(id);
+    if (deleted) await reload();
+    return deleted;
+  }
+
+  Future<void> saveColumns(List<ColumnPreference> next) async {
+    await db.saveColumns(next);
+    columns = await db.getColumns();
+    notifyListeners();
+  }
+
+  Future<void> importTasks(
+    List<TaskItem> imported,
+    Set<String> overwriteIds,
+  ) async {
+    final importedById = {for (final task in imported) task.id: task};
+    final availableIds = {
+      ...tasks.map((task) => task.id),
+      ...importedById.keys,
+    };
+    for (final task in imported) {
+      if (task.parentTaskId != null &&
+          !availableIds.contains(task.parentTaskId)) {
+        throw StateError('任务“${task.title}”引用的主任务不存在。');
+      }
+      final parent =
+          importedById[task.parentTaskId] ?? taskById(task.parentTaskId);
+      if (parent?.parentTaskId != null) {
+        throw StateError('任务“${task.title}”形成了超过一层的嵌套，当前版本不允许导入。');
+      }
+      if (task.parentTaskId == task.id)
+        throw StateError('任务“${task.title}”不能关联自身。');
+    }
+    final ordered = [...imported]
+      ..sort((a, b) {
+        if (a.parentTaskId == null && b.parentTaskId != null) return -1;
+        if (a.parentTaskId != null && b.parentTaskId == null) return 1;
+        return 0;
+      });
+    for (final task in ordered) {
+      final existing = taskById(task.id);
+      if (existing == null || overwriteIds.contains(task.id)) {
+        await db.saveTask(_withSnapshots(task));
+      }
+    }
+    await reload();
+    await _reconcileReminders();
+  }
+}
