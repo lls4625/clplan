@@ -57,7 +57,7 @@ class AppController extends ChangeNotifier {
 
   Future<void> reload() async {
     statuses = await db.getStatuses();
-    tagDefinitions = await db.getTagDefinitions();
+    tagDefinitions = _withFixedQuadrantOrder(await db.getTagDefinitions());
     contacts = await db.getContacts();
     categoryDefinitions = await db.getCategoryDefinitions();
     progressTemplates = await db.getProgressTemplates();
@@ -287,6 +287,20 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> saveCalendarWeeklyCardHeight(double height) async {
+    final limitedHeight = height
+        .clamp(1.0, AppPreferences.maximumCalendarWeeklyCardHeight)
+        .toDouble();
+    await db.savePreference(
+      'calendar_weekly_card_height',
+      '$limitedHeight',
+    );
+    preferences = preferences.copyWith(
+      calendarWeeklyCardHeight: limitedHeight,
+    );
+    notifyListeners();
+  }
+
   Future<void> saveStatus(TaskStatus status) async {
     await db.saveStatus(status);
     await reload();
@@ -305,8 +319,12 @@ class AppController extends ChangeNotifier {
     if (name.characters.length > maxTagNameLength && existing?.name != name) {
       throw StateError('标签名称最多 $maxTagNameLength 个字符。');
     }
-    if (existing?.isQuadrant == true && name != existing!.name) {
-      throw StateError('四象限默认标签不能修改名称。');
+    if (existing?.isQuadrant == true &&
+        (name != existing!.name ||
+            tag.colorValue != existing.colorValue ||
+            tag.iconName != existing.iconName ||
+            tag.sortOrder != existing.sortOrder)) {
+      throw StateError('四象限默认标签不能修改。');
     }
     final duplicate = tagDefinitions.any(
       (item) =>
@@ -315,6 +333,34 @@ class AppController extends ChangeNotifier {
     if (duplicate) throw StateError('标签名称不能重复。');
     await db.saveTagDefinition(tag.copyWith(name: name));
     await reload();
+  }
+
+  Future<void> reorderTagDefinitions(int oldIndex, int newIndex) async {
+    final previous = tagDefinitions;
+    final fixed = tagDefinitions.where((tag) => tag.isQuadrant).toList();
+    final reorderable = tagDefinitions.where((tag) => !tag.isQuadrant).toList();
+    if (oldIndex < 0 ||
+        oldIndex >= reorderable.length ||
+        newIndex < 0 ||
+        newIndex >= reorderable.length) {
+      throw StateError('标签排序位置无效。');
+    }
+    final moved = reorderable.removeAt(oldIndex);
+    reorderable.insert(newIndex, moved);
+    final next = [...fixed, ...reorderable];
+    final normalized = [
+      for (var index = 0; index < next.length; index++)
+        next[index].copyWith(sortOrder: index),
+    ];
+    tagDefinitions = normalized;
+    notifyListeners();
+    try {
+      await db.saveTagDefinitionOrder(normalized);
+    } catch (_) {
+      tagDefinitions = previous;
+      notifyListeners();
+      rethrow;
+    }
   }
 
   Future<void> saveCategoryDefinition(CategoryDefinition category) async {
@@ -342,8 +388,36 @@ class AppController extends ChangeNotifier {
     await reload();
   }
 
+  Future<void> reorderCategoryDefinitions(int oldIndex, int newIndex) async {
+    final previous = categoryDefinitions;
+    final next = [...categoryDefinitions];
+    final moved = next.removeAt(oldIndex);
+    next.insert(newIndex, moved);
+    final normalized = [
+      for (var index = 0; index < next.length; index++)
+        next[index].copyWith(sortOrder: index),
+    ];
+    categoryDefinitions = normalized;
+    notifyListeners();
+    try {
+      await db.saveCategoryDefinitionOrder(normalized);
+    } catch (_) {
+      categoryDefinitions = previous;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> deleteCategoryDefinition(String id) async {
     await db.deleteCategoryDefinition(id);
+    final remaining = categoryDefinitions
+        .where((item) => item.id != id)
+        .toList();
+    final normalized = [
+      for (var index = 0; index < remaining.length; index++)
+        remaining[index].copyWith(sortOrder: index),
+    ];
+    await db.saveCategoryDefinitionOrder(normalized);
     await reload();
   }
 
@@ -396,9 +470,90 @@ class AppController extends ChangeNotifier {
     await reload();
   }
 
+  Future<void> reorderProgressTemplates(int oldIndex, int newIndex) async {
+    final previous = progressTemplates;
+    final next = [...progressTemplates];
+    final moved = next.removeAt(oldIndex);
+    next.insert(newIndex, moved);
+    final normalized = [
+      for (var index = 0; index < next.length; index++)
+        next[index].copyWith(sortOrder: index),
+    ];
+    progressTemplates = normalized;
+    notifyListeners();
+    try {
+      await db.saveProgressTemplateOrder(normalized);
+    } catch (_) {
+      progressTemplates = previous;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  List<String> orderedCategoryNames(Iterable<String> historicalNames) =>
+      _orderedDefinitionNames(
+        categoryDefinitions.map((item) => item.name),
+        historicalNames,
+      );
+
+  List<String> orderedProgressTemplateNames(Iterable<String> historicalNames) =>
+      _orderedDefinitionNames(
+        progressTemplates.map((item) => item.name),
+        historicalNames,
+      );
+
+  List<String> orderedTagNames(Iterable<String> historicalNames) =>
+      _orderedDefinitionNames(
+        tagDefinitions.map((item) => item.name),
+        historicalNames,
+      );
+
+  List<String> _orderedDefinitionNames(
+    Iterable<String> definedNames,
+    Iterable<String> historicalNames,
+  ) {
+    final result = <String>[];
+    final seen = <String>{};
+    for (final name in definedNames) {
+      if (name.isNotEmpty && seen.add(name)) result.add(name);
+    }
+    final historical =
+        historicalNames
+            .where((name) => name.isNotEmpty && !seen.contains(name))
+            .toSet()
+            .toList()
+          ..sort();
+    result.addAll(historical);
+    return result;
+  }
+
+  List<TaskTagDefinition> _withFixedQuadrantOrder(
+    List<TaskTagDefinition> definitions,
+  ) {
+    final quadrants = <TaskTagDefinition>[];
+    for (final expected in defaultQuadrantTags) {
+      for (final definition in definitions) {
+        if (definition.id == expected.id || definition.name == expected.name) {
+          quadrants.add(definition);
+          break;
+        }
+      }
+    }
+    return [
+      ...quadrants,
+      ...definitions.where((definition) => !definition.isQuadrant),
+    ];
+  }
+
   Future<bool> deleteProgressTemplate(String id) async {
     if (progressTemplates.length <= 1) return false;
     await db.deleteProgressTemplate(id);
+    final remaining = progressTemplates.where((item) => item.id != id).toList();
+    final normalized = [
+      for (var index = 0; index < remaining.length; index++)
+        remaining[index].copyWith(sortOrder: index),
+    ];
+    await db.saveProgressTemplateOrder(normalized);
     await reload();
     return true;
   }
@@ -632,6 +787,12 @@ class AppController extends ChangeNotifier {
       throw StateError('四象限默认标签不能删除。');
     }
     await db.deleteTagDefinition(id);
+    final remaining = tagDefinitions.where((item) => item.id != id).toList();
+    final normalized = [
+      for (var index = 0; index < remaining.length; index++)
+        remaining[index].copyWith(sortOrder: index),
+    ];
+    await db.saveTagDefinitionOrder(normalized);
     await reload();
   }
 

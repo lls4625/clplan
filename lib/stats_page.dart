@@ -4,6 +4,7 @@ import 'app_controller.dart';
 import 'models.dart';
 import 'plan_editor.dart';
 import 'plan_widgets.dart';
+import 'stable_filter_chip.dart';
 import 'task_editor.dart';
 import 'task_widgets.dart';
 
@@ -1188,24 +1189,22 @@ class StatsFilterDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final categories = <String>{
-      ...controller.categoryDefinitions.map((item) => item.name),
+    final categories = controller.orderedCategoryNames([
       ...controller.plans
           .map((plan) => plan.categoryName)
           .where((name) => name.isNotEmpty),
       ...controller.tasks
           .map((task) => task.type)
           .where((name) => name.isNotEmpty),
-    }.toList()..sort();
-    final templates = <String>{
-      ...controller.progressTemplates.map((item) => item.name),
+    ]);
+    final templates = controller.orderedProgressTemplateNames([
       ...controller.plans
           .map((plan) => plan.progress.templateName)
           .where((name) => name.isNotEmpty),
       ...controller.tasks
           .map((task) => task.progress?.templateName ?? '')
           .where((name) => name.isNotEmpty),
-    }.toList()..sort();
+    ]);
     final nodes = <String>{
       ...controller.plans
           .map((plan) => plan.progress.currentNode?.name ?? '')
@@ -1214,13 +1213,12 @@ class StatsFilterDrawer extends StatelessWidget {
           .map((task) => task.progress?.currentNode?.name ?? '')
           .where((name) => name.isNotEmpty),
     }.toList()..sort();
-    final tags = <String>{
-      ...controller.tagDefinitions.map((item) => item.name),
+    final tags = controller.orderedTagNames([
       ...controller.plans.expand(
         (plan) => plan.tags.map((tag) => tag.name),
       ),
       ...controller.tasks.expand((task) => task.tags),
-    }.toList()..sort();
+    ]);
     return Drawer(
       child: SafeArea(
         child: Column(
@@ -1237,6 +1235,14 @@ class StatsFilterDrawer extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IconButton(
+                        tooltip: '恢复默认条件',
+                        onPressed: () => onChanged(StatCriteria.initial()),
+                        icon: const Icon(Icons.restart_alt),
+                      ),
                     ),
                     Align(
                       alignment: Alignment.centerRight,
@@ -1310,6 +1316,7 @@ class StatsFilterDrawer extends StatelessWidget {
                   ],
                   const Divider(height: 28),
                   DropdownButtonFormField<String>(
+                    key: ValueKey('stat-category-${criteria.categoryName}'),
                     initialValue: criteria.categoryName,
                     decoration: const InputDecoration(labelText: '分类'),
                     items: [
@@ -1328,6 +1335,9 @@ class StatsFilterDrawer extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+                    key: ValueKey(
+                      'stat-template-${criteria.progressTemplateName}',
+                    ),
                     initialValue: criteria.progressTemplateName,
                     decoration: const InputDecoration(labelText: '进度方案'),
                     items: [
@@ -1346,6 +1356,7 @@ class StatsFilterDrawer extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+                    key: ValueKey('stat-node-${criteria.progressNodeName}'),
                     initialValue: criteria.progressNodeName,
                     decoration: const InputDecoration(labelText: '进度节点'),
                     items: [
@@ -1364,6 +1375,7 @@ class StatsFilterDrawer extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+                    key: ValueKey('stat-plan-${criteria.planId}'),
                     initialValue: criteria.planId,
                     decoration: const InputDecoration(labelText: '所属计划'),
                     items: [
@@ -1407,8 +1419,8 @@ class StatsFilterDrawer extends StatelessWidget {
                     runSpacing: 8,
                     children: tags.map((tag) {
                       final selected = criteria.tags.contains(tag);
-                      return FilterChip(
-                        label: Text(tag),
+                      return StableFilterChip(
+                        label: tag,
                         selected: selected,
                         onSelected: (value) {
                           final next = {...criteria.tags};
@@ -1417,19 +1429,6 @@ class StatsFilterDrawer extends StatelessWidget {
                         },
                       );
                     }).toList(),
-                  ),
-                  const SizedBox(height: 18),
-                  OutlinedButton.icon(
-                    onPressed: () => onChanged(
-                      StatCriteria.initial().copyWith(
-                        mode: criteria.mode,
-                        anchor: criteria.anchor,
-                        customStart: criteria.customStart,
-                        customEnd: criteria.customEnd,
-                      ),
-                    ),
-                    icon: const Icon(Icons.restart_alt),
-                    label: const Text('清空业务条件'),
                   ),
                 ],
               ),

@@ -1163,6 +1163,43 @@ class PlanItem {
   final bool reminderEnabled;
   final List<TaskReminderRule> reminders;
   final List<ContactEntry> contacts;
+
+  PlanItem copyWith({
+    String? name,
+    String? description,
+    String? startDate,
+    String? targetDate,
+    String? categoryName,
+    int? categoryColorValue,
+    String? categoryIconName,
+    List<TaskTagSnapshot>? tags,
+    ProgressSnapshot? progress,
+    List<PlanMilestone>? milestones,
+    List<RecurrenceRule>? rules,
+    DateTime? updatedAt,
+    PlanCalendarDisplayMode? calendarDisplayMode,
+    bool? reminderEnabled,
+    List<TaskReminderRule>? reminders,
+    List<ContactEntry>? contacts,
+  }) => PlanItem(
+    id: id,
+    name: name ?? this.name,
+    description: description ?? this.description,
+    startDate: startDate ?? this.startDate,
+    targetDate: targetDate ?? this.targetDate,
+    categoryName: categoryName ?? this.categoryName,
+    categoryColorValue: categoryColorValue ?? this.categoryColorValue,
+    categoryIconName: categoryIconName ?? this.categoryIconName,
+    tags: tags ?? this.tags,
+    progress: progress ?? this.progress,
+    milestones: milestones ?? this.milestones,
+    rules: rules ?? this.rules,
+    updatedAt: updatedAt ?? this.updatedAt,
+    calendarDisplayMode: calendarDisplayMode ?? this.calendarDisplayMode,
+    reminderEnabled: reminderEnabled ?? this.reminderEnabled,
+    reminders: reminders ?? this.reminders,
+    contacts: contacts ?? this.contacts,
+  );
 }
 
 class ColumnPreference {
@@ -1195,12 +1232,14 @@ class AppPreferences {
     this.calendarSmallHeight = 62,
     this.calendarMediumHeight = 82,
     this.calendarLargeHeight = 102,
+    this.calendarWeeklyCardHeight = 0,
     this.defaultReminderMinutes = -1,
     this.reminderSound = true,
   });
 
   static const double minimumCalendarRowHeight = 62;
   static const double maximumCalendarRowHeight = 360;
+  static const double maximumCalendarWeeklyCardHeight = 2000;
 
   final String theme;
   final String font;
@@ -1209,6 +1248,7 @@ class AppPreferences {
   final double calendarSmallHeight;
   final double calendarMediumHeight;
   final double calendarLargeHeight;
+  final double calendarWeeklyCardHeight;
   final int defaultReminderMinutes;
   final bool reminderSound;
 
@@ -1233,6 +1273,7 @@ class AppPreferences {
     double? calendarSmallHeight,
     double? calendarMediumHeight,
     double? calendarLargeHeight,
+    double? calendarWeeklyCardHeight,
     int? defaultReminderMinutes,
     bool? reminderSound,
   }) => AppPreferences(
@@ -1243,6 +1284,8 @@ class AppPreferences {
     calendarSmallHeight: calendarSmallHeight ?? this.calendarSmallHeight,
     calendarMediumHeight: calendarMediumHeight ?? this.calendarMediumHeight,
     calendarLargeHeight: calendarLargeHeight ?? this.calendarLargeHeight,
+    calendarWeeklyCardHeight:
+        calendarWeeklyCardHeight ?? this.calendarWeeklyCardHeight,
     defaultReminderMinutes:
         defaultReminderMinutes ?? this.defaultReminderMinutes,
     reminderSound: reminderSound ?? this.reminderSound,

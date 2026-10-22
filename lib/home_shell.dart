@@ -24,6 +24,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int index = 0;
   DateTime selectedDate = DateTime.now();
   late StatCriteria statCriteria;
+  late PlanSearchCriteria planSearchCriteria;
   PlanCompletionFilter planFilter = PlanCompletionFilter.unfinished;
   bool openingNotificationTask = false;
 
@@ -32,6 +33,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     statCriteria = StatCriteria.initial();
+    planSearchCriteria = PlanSearchCriteria.initial();
   }
 
   @override
@@ -64,6 +66,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           PlansPage(
             controller: widget.controller,
             filter: planFilter,
+            searchCriteria: planSearchCriteria,
             onFilterChanged: (value) {
               if (value != planFilter) setState(() => planFilter = value);
             },
@@ -107,6 +110,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             actions: _actions(context),
           ),
           endDrawer: switch (index) {
+            1 => PlanSearchDrawer(
+              controller: widget.controller,
+              criteria: planSearchCriteria,
+              onChanged: (value) => setState(() => planSearchCriteria = value),
+            ),
             2 => StatsFilterDrawer(
               controller: widget.controller,
               criteria: statCriteria,
@@ -197,6 +205,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         tooltip: '新建计划',
         onPressed: () => showPlanEditor(context, widget.controller),
         icon: const Icon(Icons.add),
+      ),
+      IconButton(
+        tooltip: '查询条件',
+        onPressed: () => scaffoldKey.currentState?.openEndDrawer(),
+        icon: const Icon(Icons.filter_alt_outlined),
       ),
     ],
     2 => [

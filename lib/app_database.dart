@@ -1479,6 +1479,18 @@ class AppDatabase {
       calendarSmallHeight: calendarHeight('calendar_small_height', 62),
       calendarMediumHeight: calendarHeight('calendar_medium_height', 82),
       calendarLargeHeight: calendarHeight('calendar_large_height', 102),
+      calendarWeeklyCardHeight: (() {
+        final parsed = double.tryParse(
+          values['calendar_weekly_card_height'] ?? '',
+        );
+        if (parsed == null ||
+            !parsed.isFinite ||
+            parsed <= 0 ||
+            parsed > AppPreferences.maximumCalendarWeeklyCardHeight) {
+          return 0.0;
+        }
+        return parsed;
+      })(),
       defaultReminderMinutes:
           int.tryParse(values['default_reminder_minutes'] ?? '') ?? -1,
       reminderSound: values['reminder_sound'] != 'false',
@@ -1642,6 +1654,22 @@ class AppDatabase {
     );
   }
 
+  Future<void> saveTagDefinitionOrder(
+    List<TaskTagDefinition> definitions,
+  ) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final definition in definitions) {
+        await txn.update(
+          'tag_definitions',
+          {'sort_order': definition.sortOrder},
+          where: 'id = ?',
+          whereArgs: [definition.id],
+        );
+      }
+    });
+  }
+
   Future<void> saveCategoryDefinition(CategoryDefinition category) async {
     final db = await database;
     await db.insert(
@@ -1649,6 +1677,22 @@ class AppDatabase {
       category.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  Future<void> saveCategoryDefinitionOrder(
+    List<CategoryDefinition> definitions,
+  ) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final definition in definitions) {
+        await txn.update(
+          'category_definitions',
+          {'sort_order': definition.sortOrder},
+          where: 'id = ?',
+          whereArgs: [definition.id],
+        );
+      }
+    });
   }
 
   Future<void> deleteCategoryDefinition(String id) async {
@@ -1679,6 +1723,22 @@ class AppDatabase {
           'kind': node.kind.name,
           'sort_order': i,
         });
+      }
+    });
+  }
+
+  Future<void> saveProgressTemplateOrder(
+    List<ProgressTemplate> templates,
+  ) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final template in templates) {
+        await txn.update(
+          'progress_templates',
+          {'sort_order': template.sortOrder},
+          where: 'id = ?',
+          whereArgs: [template.id],
+        );
       }
     });
   }

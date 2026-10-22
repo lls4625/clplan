@@ -1163,6 +1163,45 @@ class _ContactEditor extends StatelessWidget {
   }
 }
 
+Widget _preserveReorderAppearance(
+  Widget child,
+  int index,
+  Animation<double> animation,
+) => child;
+
+class _PlatformAwareReorderHandle extends StatelessWidget {
+  const _PlatformAwareReorderHandle({
+    required this.index,
+    this.padding = const EdgeInsets.all(14),
+  });
+
+  final int index;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final handle = Padding(
+      padding: padding,
+      child: const Icon(Icons.drag_handle),
+    );
+    return switch (Theme.of(context).platform) {
+      TargetPlatform.iOS ||
+      TargetPlatform.android ||
+      TargetPlatform.fuchsia => Semantics(
+        label: '长按拖动排序',
+        child: ReorderableDelayedDragStartListener(
+          index: index,
+          child: handle,
+        ),
+      ),
+      _ => Tooltip(
+        message: '拖动排序',
+        child: ReorderableDragStartListener(index: index, child: handle),
+      ),
+    };
+  }
+}
+
 class _CategoryEditor extends StatelessWidget {
   const _CategoryEditor({required this.controller});
   final AppController controller;
@@ -1188,59 +1227,44 @@ class _CategoryEditor extends StatelessWidget {
     initialChildSize: .82,
     builder: (context, scroll) => AnimatedBuilder(
       animation: controller,
-      builder: (context, _) => ListView(
-        controller: scroll,
+      builder: (context, _) => ReorderableListView.builder(
+        scrollController: scroll,
+        buildDefaultDragHandles: false,
+        proxyDecorator: _preserveReorderAppearance,
         padding: const EdgeInsets.all(18),
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '分类',
-                  style: Theme.of(context).textTheme.headlineSmall,
+        header: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '分类',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
                 ),
-              ),
-              Text(
-                '${controller.categoryDefinitions.length}/$maxCategoryDefinitionCount',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-          const Text(
-            '分类定义仅用于以后选择；已有计划和任务保存独立快照。',
-            style: TextStyle(fontSize: 12),
-          ),
-          const SizedBox(height: 10),
-          ...controller.categoryDefinitions.map(
-            (category) => Card(
-              child: ListTile(
-                leading: Icon(category.icon, color: category.color),
-                title: Text(category.name),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      tooltip: '编辑分类',
-                      onPressed: () => _edit(context, category),
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                    IconButton(
-                      tooltip: '删除分类',
-                      onPressed: () =>
-                          controller.deleteCategoryDefinition(category.id),
-                      icon: const Icon(Icons.delete_outline),
-                    ),
-                  ],
+                Text(
+                  '${controller.categoryDefinitions.length}/$maxCategoryDefinitionCount',
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
-              ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: '关闭',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
             ),
-          ),
-          FilledButton.icon(
+            const Text(
+              '拖动手柄调整顺序；已有计划和任务保存独立快照。',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+        footer: Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: FilledButton.icon(
             onPressed:
                 controller.categoryDefinitions.length >=
                     maxCategoryDefinitionCount
@@ -1258,10 +1282,61 @@ class _CategoryEditor extends StatelessWidget {
             icon: const Icon(Icons.add),
             label: const Text('添加分类'),
           ),
-        ],
+        ),
+        itemCount: controller.categoryDefinitions.length,
+        onReorderItem: (oldIndex, newIndex) async {
+          try {
+            await controller.reorderCategoryDefinitions(oldIndex, newIndex);
+          } catch (exception) {
+            if (context.mounted) _showError(context, exception);
+          }
+        },
+        itemBuilder: (context, index) {
+          final category = controller.categoryDefinitions[index];
+          return Card(
+            key: ValueKey(category.id),
+            child: Row(
+              children: [
+                _PlatformAwareReorderHandle(
+                  index: index,
+                ),
+                Expanded(
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.only(right: 4),
+                    leading: Icon(category.icon, color: category.color),
+                    title: Text(category.name),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: '编辑分类',
+                          onPressed: () => _edit(context, category),
+                          icon: const Icon(Icons.edit_outlined),
+                        ),
+                        IconButton(
+                          tooltip: '删除分类',
+                          onPressed: () =>
+                              controller.deleteCategoryDefinition(category.id),
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     ),
   );
+
+  void _showError(BuildContext context, Object exception) =>
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(exception.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
 
   Future<void> _edit(BuildContext context, CategoryDefinition original) async {
     final name = TextEditingController(text: original.name);
@@ -1373,54 +1448,75 @@ class _ProgressTemplateEditor extends StatelessWidget {
     animation: controller,
     builder: (context, _) => Scaffold(
       appBar: AppBar(title: const Text('进度方案'), centerTitle: true),
-      body: ListView(
+      body: ReorderableListView.builder(
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(18),
+        buildDefaultDragHandles: false,
+        proxyDecorator: _preserveReorderAppearance,
+        header: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.route_outlined),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text('为不同类型的计划设置专属流程。每套方案需要一个开始节点和至少一个结束节点。'),
+                  ),
+                ],
+              ),
             ),
-            child: const Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.route_outlined),
-                SizedBox(width: 12),
-                Expanded(child: Text('为不同类型的计划设置专属流程。每套方案需要一个开始节点和至少一个结束节点。')),
-              ],
+            const SizedBox(height: 20),
+            Text(
+              '全部方案 ${controller.progressTemplates.length}/$maxProgressTemplateCount',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            '全部方案 ${controller.progressTemplates.length}/$maxProgressTemplateCount',
-            style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 10),
-          ...controller.progressTemplates.map(
-            (template) => _ProgressTemplateCard(
-              template: template,
-              onEdit: () => _openTemplate(context, template),
-              onDelete: () async {
-                final deleted = await controller.deleteProgressTemplate(
-                  template.id,
-                );
-                if (!deleted && context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('至少保留一套进度方案。')));
-                }
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
+            const SizedBox(height: 4),
+            const Text('拖动手柄调整方案顺序。', style: TextStyle(fontSize: 12)),
+            const SizedBox(height: 10),
+          ],
+        ),
+        footer: const Padding(
+          padding: EdgeInsets.only(top: 8),
+          child: Text(
             '删除方案不会影响已保存的任务与计划。',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12),
           ),
-        ],
+        ),
+        itemCount: controller.progressTemplates.length,
+        onReorderItem: (oldIndex, newIndex) async {
+          try {
+            await controller.reorderProgressTemplates(oldIndex, newIndex);
+          } catch (exception) {
+            if (context.mounted) _showError(context, exception);
+          }
+        },
+        itemBuilder: (context, index) {
+          final template = controller.progressTemplates[index];
+          return _ProgressTemplateCard(
+            key: ValueKey(template.id),
+            template: template,
+            dragIndex: index,
+            onEdit: () => _openTemplate(context, template),
+            onDelete: () async {
+              final deleted = await controller.deleteProgressTemplate(
+                template.id,
+              );
+              if (!deleted && context.mounted) {
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('至少保留一套进度方案。')));
+              }
+            },
+          );
+        },
       ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(18, 10, 18, 14),
@@ -1468,16 +1564,26 @@ class _ProgressTemplateEditor extends StatelessWidget {
               _ProgressTemplateForm(controller: controller, template: template),
         ),
       );
+
+  void _showError(BuildContext context, Object exception) =>
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(exception.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
 }
 
 class _ProgressTemplateCard extends StatelessWidget {
   const _ProgressTemplateCard({
+    super.key,
     required this.template,
+    required this.dragIndex,
     required this.onEdit,
     required this.onDelete,
   });
 
   final ProgressTemplate template;
+  final int dragIndex;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -1522,6 +1628,10 @@ class _ProgressTemplateCard extends StatelessWidget {
                         ),
                       ],
                     ),
+                  ),
+                  _PlatformAwareReorderHandle(
+                    index: dragIndex,
+                    padding: const EdgeInsets.all(12),
                   ),
                   IconButton(
                     tooltip: '编辑进度方案',
@@ -1944,78 +2054,135 @@ class _TagEditorState extends State<_TagEditor> {
     initialChildSize: .9,
     builder: (context, scroll) => AnimatedBuilder(
       animation: widget.controller,
-      builder: (context, _) => ListView(
-        controller: scroll,
-        padding: const EdgeInsets.all(18),
-        children: [
-          Row(
+      builder: (context, _) {
+        final fixedTags = widget.controller.tagDefinitions
+            .where((tag) => tag.isQuadrant)
+            .toList();
+        final reorderableTags = widget.controller.tagDefinitions
+            .where((tag) => !tag.isQuadrant)
+            .toList();
+        return ReorderableListView.builder(
+          scrollController: scroll,
+          buildDefaultDragHandles: false,
+          proxyDecorator: _preserveReorderAppearance,
+          padding: const EdgeInsets.all(18),
+          header: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(
-                  '标签',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '标签',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                  ),
+                  Text(
+                    '${widget.controller.tagDefinitions.length}/$maxTagDefinitionCount',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: '关闭',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
               ),
-              Text(
-                '${widget.controller.tagDefinitions.length}/$maxTagDefinitionCount',
-                style: Theme.of(context).textTheme.bodyMedium,
+              const Text(
+                '四象限标签固定在最前且不可修改；拖动普通标签手柄调整其余顺序。',
+                style: TextStyle(fontSize: 12),
               ),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close),
-              ),
+              for (final tag in fixedTags) _buildLockedTag(context, tag),
+              const SizedBox(height: 10),
             ],
           ),
-          if (widget.controller.tagDefinitions.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: Text('还没有可选标签')),
+          footer: Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: FilledButton.icon(
+              onPressed:
+                  widget.controller.tagDefinitions.length >=
+                      maxTagDefinitionCount
+                  ? null
+                  : () => _add(context),
+              icon: const Icon(Icons.add),
+              label: const Text('添加标签'),
             ),
-          ...widget.controller.tagDefinitions.map(
-            (tag) => Card(
+          ),
+          itemCount: reorderableTags.length,
+          onReorderItem: (oldIndex, newIndex) async {
+            try {
+              await widget.controller.reorderTagDefinitions(
+                oldIndex,
+                newIndex,
+              );
+            } catch (exception) {
+              if (context.mounted) _message(context, exception);
+            }
+          },
+          itemBuilder: (context, index) {
+            final tag = reorderableTags[index];
+            return Card(
               key: ValueKey(tag.id),
-              child: _editingTagIds.contains(tag.id)
-                  ? _buildEditor(context, tag)
-                  : _buildSummary(context, tag),
-            ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _PlatformAwareReorderHandle(
+                    index: index,
+                  ),
+                  Expanded(
+                    child: _editingTagIds.contains(tag.id)
+                        ? _buildEditor(context, tag)
+                        : _buildSummary(context, tag),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ),
+  );
+
+  Widget _buildLockedTag(BuildContext context, TaskTagDefinition tag) => Card(
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Tooltip(
+          message: '四象限标签固定且不可修改',
+          child: Padding(
+            padding: EdgeInsets.all(14),
+            child: Icon(Icons.lock_outline),
           ),
-          const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed:
-                widget.controller.tagDefinitions.length >= maxTagDefinitionCount
-                ? null
-                : () => _add(context),
-            icon: const Icon(Icons.add),
-            label: const Text('添加标签'),
-          ),
-        ],
-      ),
+        ),
+        Expanded(child: _buildSummary(context, tag)),
+      ],
     ),
   );
 
   Widget _buildSummary(BuildContext context, TaskTagDefinition tag) => ListTile(
     leading: Icon(tag.icon, color: tag.color),
     title: Text(tag.name),
-    trailing: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          tooltip: '编辑标签',
-          onPressed: () => setState(() {
-            _editingTagIds.add(tag.id);
-            _draftTagNames[tag.id] = tag.name;
-          }),
-          icon: const Icon(Icons.edit_outlined),
-        ),
-        if (!tag.isQuadrant)
-          IconButton(
-            tooltip: '删除标签配置',
-            onPressed: () => _delete(context, tag),
-            icon: const Icon(Icons.delete_outline),
+    trailing: tag.isQuadrant
+        ? null
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: '编辑标签',
+                onPressed: () => setState(() {
+                  _editingTagIds.add(tag.id);
+                  _draftTagNames[tag.id] = tag.name;
+                }),
+                icon: const Icon(Icons.edit_outlined),
+              ),
+              IconButton(
+                tooltip: '删除标签配置',
+                onPressed: () => _delete(context, tag),
+                icon: const Icon(Icons.delete_outline),
+              ),
+            ],
           ),
-      ],
-    ),
   );
 
   Widget _buildEditor(BuildContext context, TaskTagDefinition tag) => Padding(
@@ -2259,9 +2426,8 @@ class _ColumnEditorState extends State<_ColumnEditor> {
             scrollController: scroll,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             itemCount: columns.length,
-            onReorder: (oldIndex, newIndex) {
+            onReorderItem: (oldIndex, newIndex) {
               setState(() {
-                if (newIndex > oldIndex) newIndex--;
                 final item = columns.removeAt(oldIndex);
                 columns.insert(newIndex, item);
               });
