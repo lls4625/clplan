@@ -31,20 +31,16 @@ class CalendarPageState extends State<CalendarPage>
   late double preferenceHeightSeen;
   double scaleStartHeight = 0;
   double scaleStartDistance = 0;
-  double? pendingScaleHeight;
+  int scaleDirection = 0;
   bool scaling = false;
   bool scaleFrameScheduled = false;
-  bool scaleLockedAtMinimum = false;
-  bool scaleLockedAtMaximum = false;
   bool weeklyCardView = false;
-  bool scaleAnchorCorrectionScheduled = false;
   final scalePointers = <int, Offset>{};
   final scroll = ScrollController();
   final listKey = GlobalKey();
   final todayKey = GlobalKey();
   final monthKeys = List.generate(12, (_) => GlobalKey());
   final weekKeys = List.generate(54, (_) => GlobalKey());
-  _ScaleAnchor? scaleAnchor;
   int revealGeneration = 0;
 
   @override
@@ -290,10 +286,7 @@ class CalendarPageState extends State<CalendarPage>
     if (scalePointers.length != 2) return;
     scaleStartDistance = _pointerDistance();
     scaleStartHeight = rowHeight;
-    pendingScaleHeight = null;
-    scaleLockedAtMinimum = rowHeight <= AppPreferences.minimumCalendarRowHeight;
-    scaleLockedAtMaximum = rowHeight >= AppPreferences.maximumCalendarRowHeight;
-    scaleAnchor = _captureScaleAnchor(_pointerCenterDy());
+    scaleDirection = 0;
     setState(() => scaling = true);
   }
 
@@ -301,24 +294,23 @@ class CalendarPageState extends State<CalendarPage>
     if (!scalePointers.containsKey(event.pointer)) return;
     scalePointers[event.pointer] = event.position;
     if (!scaling || scalePointers.length < 2 || scaleStartDistance == 0) return;
-    final rawHeight =
-        scaleStartHeight * (_pointerDistance() / scaleStartDistance);
-    _queueScaleHeight(_boundedScaleHeight(rawHeight));
+    _scheduleScaleFrame();
   }
 
   void _handlePointerEnd(PointerEvent event) {
+    double? finalHeight;
+    if (scaling && scalePointers.length >= 2) {
+      scalePointers[event.pointer] = event.position;
+      finalHeight = _sampleScaleHeight();
+    }
     scalePointers.remove(event.pointer);
     if (!scaling || scalePointers.length >= 2) return;
-    final finalHeight = pendingScaleHeight;
-    pendingScaleHeight = null;
     setState(() {
       if (finalHeight != null) rowHeight = finalHeight;
       scaling = false;
     });
-    scaleLockedAtMinimum = false;
-    scaleLockedAtMaximum = false;
+    scaleDirection = 0;
     preferenceHeightSeen = rowHeight;
-    _scheduleScaleAnchorCorrection();
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncVisibleMonth());
     _saveScaledRowHeight();
   }
@@ -328,112 +320,48 @@ class CalendarPageState extends State<CalendarPage>
     return (points[0] - points[1]).distance;
   }
 
-  double _pointerCenterDy() {
-    final points = scalePointers.values.take(2).toList();
-    return (points[0].dy + points[1].dy) / 2;
+  double _boundedScaleHeight(double rawHeight) => rawHeight
+      .clamp(
+        AppPreferences.minimumCalendarRowHeight,
+        AppPreferences.maximumCalendarRowHeight,
+      )
+      .toDouble();
+
+  double _snapScaleHeightToPhysicalPixel(double height) {
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+    return (height * devicePixelRatio).round() / devicePixelRatio;
   }
 
-  double _boundedScaleHeight(double rawHeight) {
-    const releaseDistance = 6.0;
-    const minimum = AppPreferences.minimumCalendarRowHeight;
-    const maximum = AppPreferences.maximumCalendarRowHeight;
+  double? _sampleScaleHeight() {
+    if (scalePointers.length < 2 || scaleStartDistance == 0) return null;
+    final rawHeight =
+        scaleStartHeight * (_pointerDistance() / scaleStartDistance);
+    final nextHeight = _snapScaleHeightToPhysicalPixel(
+      _boundedScaleHeight(rawHeight),
+    );
+    final delta = nextHeight - rowHeight;
+    if (delta.abs() < .0001) return null;
 
-    if (scaleLockedAtMaximum) {
-      if (rawHeight >= maximum - releaseDistance) return maximum;
-      scaleLockedAtMaximum = false;
+    final nextDirection = delta > 0 ? 1 : -1;
+    const reversalThreshold = .75;
+    if (scaleDirection != 0 &&
+        nextDirection != scaleDirection &&
+        delta.abs() < reversalThreshold) {
+      return null;
     }
-    if (scaleLockedAtMinimum) {
-      if (rawHeight <= minimum + releaseDistance) return minimum;
-      scaleLockedAtMinimum = false;
-    }
-    if (rawHeight >= maximum) {
-      scaleLockedAtMaximum = true;
-      return maximum;
-    }
-    if (rawHeight <= minimum) {
-      scaleLockedAtMinimum = true;
-      return minimum;
-    }
-    return rawHeight;
+    scaleDirection = nextDirection;
+    return nextHeight;
   }
 
-  void _queueScaleHeight(double nextHeight) {
-    pendingScaleHeight = nextHeight;
+  void _scheduleScaleFrame() {
     if (scaleFrameScheduled) return;
     scaleFrameScheduled = true;
     WidgetsBinding.instance.scheduleFrameCallback((_) {
       scaleFrameScheduled = false;
-      if (!mounted || !scaling) {
-        pendingScaleHeight = null;
-        return;
-      }
-      final height = pendingScaleHeight;
-      pendingScaleHeight = null;
-      if (height == null || (height - rowHeight).abs() < .2) return;
+      if (!mounted || !scaling) return;
+      final height = _sampleScaleHeight();
+      if (height == null) return;
       setState(() => rowHeight = height);
-      _scheduleScaleAnchorCorrection();
-    });
-  }
-
-  _ScaleAnchor? _captureScaleAnchor(double viewportAnchorY) {
-    final listBox = listKey.currentContext?.findRenderObject();
-    if (listBox is! RenderBox || !listBox.hasSize) return null;
-
-    var closestMonthIndex = -1;
-    var closestDistance = double.infinity;
-    RenderBox? closestMonthBox;
-    for (var index = 0; index < monthKeys.length; index++) {
-      final monthBox = monthKeys[index].currentContext?.findRenderObject();
-      if (monthBox is! RenderBox || !monthBox.hasSize) continue;
-      final top = monthBox.localToGlobal(Offset.zero).dy;
-      final bottom = top + monthBox.size.height;
-      final distance = viewportAnchorY < top
-          ? top - viewportAnchorY
-          : viewportAnchorY > bottom
-          ? viewportAnchorY - bottom
-          : 0.0;
-      if (distance < closestDistance) {
-        closestMonthIndex = index;
-        closestDistance = distance;
-        closestMonthBox = monthBox;
-      }
-    }
-    if (closestMonthIndex < 0 || closestMonthBox == null) return null;
-
-    final monthTop = closestMonthBox.localToGlobal(Offset.zero).dy;
-    final monthFraction =
-        ((viewportAnchorY - monthTop) / closestMonthBox.size.height)
-            .clamp(0.0, 1.0)
-            .toDouble();
-    return _ScaleAnchor(
-      monthIndex: closestMonthIndex,
-      monthFraction: monthFraction,
-      viewportAnchorY: viewportAnchorY,
-    );
-  }
-
-  void _scheduleScaleAnchorCorrection() {
-    if (scaleAnchorCorrectionScheduled || scaleAnchor == null) return;
-    scaleAnchorCorrectionScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      scaleAnchorCorrectionScheduled = false;
-      if (!mounted || !scroll.hasClients) return;
-      final anchor = scaleAnchor;
-      if (anchor == null) return;
-      final monthBox = monthKeys[anchor.monthIndex].currentContext
-          ?.findRenderObject();
-      if (monthBox is! RenderBox || !monthBox.hasSize) return;
-
-      final monthTop = monthBox.localToGlobal(Offset.zero).dy;
-      final anchoredY = monthTop + monthBox.size.height * anchor.monthFraction;
-      final position = scroll.position;
-      final nextOffset = (position.pixels + anchoredY - anchor.viewportAnchorY)
-          .clamp(position.minScrollExtent, position.maxScrollExtent)
-          .toDouble();
-      if ((nextOffset - position.pixels).abs() >= .5) {
-        scroll.jumpTo(nextOffset);
-      }
-      if (!scaling) scaleAnchor = null;
     });
   }
 
@@ -939,18 +867,6 @@ class _CalendarPlanLabel extends StatelessWidget {
       ],
     );
   }
-}
-
-class _ScaleAnchor {
-  const _ScaleAnchor({
-    required this.monthIndex,
-    required this.monthFraction,
-    required this.viewportAnchorY,
-  });
-
-  final int monthIndex;
-  final double monthFraction;
-  final double viewportAnchorY;
 }
 
 class CalendarDayPage extends StatelessWidget {
