@@ -6,6 +6,126 @@ import 'plan_editor.dart';
 import 'plan_widgets.dart';
 import 'task_widgets.dart';
 
+const double _calendarMonthHeaderExtent = 56;
+const double _calendarMonthFooterExtent = 10;
+const double _calendarMonthFixedExtent =
+    _calendarMonthHeaderExtent + _calendarMonthFooterExtent;
+
+class _CalendarScrollController extends ScrollController {
+  bool _userScrollLocked = false;
+
+  void setUserScrollLocked(bool locked) {
+    if (_userScrollLocked == locked) return;
+    _userScrollLocked = locked;
+    for (final position in positions) {
+      if (position is _CalendarScrollPosition) {
+        position.setUserScrollLocked(locked);
+      }
+    }
+  }
+
+  void applyHandoffUserOffset(double delta) {
+    for (final position in positions) {
+      if (position is _CalendarScrollPosition) {
+        position.applyHandoffUserOffset(delta);
+      }
+    }
+  }
+
+  void correctToOnNextDimensions(double pixels) {
+    for (final position in positions) {
+      if (position is _CalendarScrollPosition) {
+        position.pendingPixels = pixels;
+      }
+    }
+  }
+
+  @override
+  ScrollPosition createScrollPosition(
+    ScrollPhysics physics,
+    ScrollContext context,
+    ScrollPosition? oldPosition,
+  ) => _CalendarScrollPosition(
+    physics: physics,
+    context: context,
+    initialPixels: initialScrollOffset,
+    keepScrollOffset: keepScrollOffset,
+    oldPosition: oldPosition,
+    debugLabel: debugLabel,
+    userScrollLocked: _userScrollLocked,
+  );
+}
+
+class _CalendarScrollPosition extends ScrollPositionWithSingleContext {
+  _CalendarScrollPosition({
+    required ScrollPhysics physics,
+    required ScrollContext context,
+    double? initialPixels,
+    bool keepScrollOffset = true,
+    ScrollPosition? oldPosition,
+    String? debugLabel,
+    required bool userScrollLocked,
+  }) : super(
+         physics: physics,
+         context: context,
+         initialPixels: initialPixels,
+         keepScrollOffset: keepScrollOffset,
+         oldPosition: oldPosition,
+         debugLabel: debugLabel,
+       ) {
+    _userScrollLocked = userScrollLocked;
+    if (oldPosition is _CalendarScrollPosition) {
+      pendingPixels = oldPosition.pendingPixels;
+    }
+  }
+
+  late bool _userScrollLocked;
+  double? pendingPixels;
+
+  void setUserScrollLocked(bool locked) {
+    _userScrollLocked = locked;
+    if (locked) goIdle();
+  }
+
+  void applyHandoffUserOffset(double delta) {
+    super.applyUserOffset(delta);
+  }
+
+  @override
+  void applyUserOffset(double delta) {
+    if (_userScrollLocked) return;
+    super.applyUserOffset(delta);
+  }
+
+  @override
+  void goBallistic(double velocity) {
+    if (_userScrollLocked) {
+      goIdle();
+      return;
+    }
+    super.goBallistic(velocity);
+  }
+
+  @override
+  bool correctForNewDimensions(
+    ScrollMetrics oldPosition,
+    ScrollMetrics newPosition,
+  ) {
+    final requestedPixels = pendingPixels;
+    if (requestedPixels != null) {
+      pendingPixels = null;
+      final correctedPixels = requestedPixels
+          .clamp(newPosition.minScrollExtent, newPosition.maxScrollExtent)
+          .toDouble();
+      if ((correctedPixels - pixels).abs() > .0001) {
+        correctPixels(correctedPixels);
+        return false;
+      }
+    }
+    return super.correctForNewDimensions(oldPosition, newPosition);
+  }
+}
+
 class CalendarPage extends StatefulWidget {
   const CalendarPage({
     super.key,
@@ -31,12 +151,19 @@ class CalendarPageState extends State<CalendarPage>
   late double preferenceHeightSeen;
   double scaleStartHeight = 0;
   double scaleStartDistance = 0;
+  double scaleAnchorDocumentY = 0;
   int scaleDirection = 0;
   bool scaling = false;
+  bool pinchSessionActive = false;
+  bool saveRowHeightAfterPinch = false;
   bool scaleFrameScheduled = false;
   bool weeklyCardView = false;
   final scalePointers = <int, Offset>{};
-  final scroll = ScrollController();
+  int? handoffPointer;
+  double? handoffPointerY;
+  bool handoffMoved = false;
+  int pinchSessionGeneration = 0;
+  final scroll = _CalendarScrollController();
   final listKey = GlobalKey();
   final todayKey = GlobalKey();
   final monthKeys = List.generate(12, (_) => GlobalKey());
@@ -202,122 +329,261 @@ class CalendarPageState extends State<CalendarPage>
         Divider(height: 1, color: colorScheme.outlineVariant),
         Expanded(
           child: LayoutBuilder(
-            builder: (context, constraints) => Listener(
-              behavior: HitTestBehavior.translucent,
-              onPointerDown: weeklyCardView ? null : _handlePointerDown,
-              onPointerMove: weeklyCardView ? null : _handlePointerMove,
-              onPointerUp: weeklyCardView ? null : _handlePointerEnd,
-              onPointerCancel: weeklyCardView ? null : _handlePointerEnd,
-              child: ListView(
-                key: listKey,
-                controller: scroll,
-                physics: scaling ? const NeverScrollableScrollPhysics() : null,
-                padding: const EdgeInsets.fromLTRB(6, 0, 6, 110),
-                children: [
-                  if (weeklyCardView)
-                    _WeeklyCardCalendar(
-                      year: year,
-                      controller: widget.controller,
-                      selected: selected,
-                      weekKeys: weekKeys,
-                      todayKey: todayKey,
-                      viewportHeight: constraints.maxHeight,
-                      onSelected: (date) {
-                        widget.onSelected(date);
-                        setState(() {
-                          jumpMonth = date.month;
-                          visibleMonth = date.month;
-                        });
-                        widget.onDayTap(date);
-                      },
-                    )
-                  else
-                    ...List.generate(
-                      12,
-                      (month) => _Month(
-                        key: monthKeys[month],
+            builder: (context, constraints) => weeklyCardView
+                ? ListView(
+                    key: listKey,
+                    controller: scroll,
+                    padding: const EdgeInsets.fromLTRB(6, 0, 6, 110),
+                    children: [
+                      _WeeklyCardCalendar(
                         year: year,
-                        month: month + 1,
                         controller: widget.controller,
                         selected: selected,
-                        rowHeight: rowHeight,
+                        weekKeys: weekKeys,
                         todayKey: todayKey,
-                        onSelected: (date) {
-                          widget.onSelected(date);
-                          setState(() {
-                            jumpMonth = date.month;
-                            visibleMonth = date.month;
-                          });
-                          widget.onDayTap(date);
-                        },
+                        viewportHeight: constraints.maxHeight,
+                        onSelected: _selectDate,
                       ),
-                    ),
-                ],
-              ),
-            ),
+                    ],
+                  )
+                : _buildZoomableMonthCalendar(selected),
           ),
         ),
       ],
     );
   }
 
-  void _syncVisibleMonth() {
-    if (!mounted || weeklyCardView || scaling) return;
-    final viewport = listKey.currentContext?.findRenderObject();
-    if (viewport is! RenderBox || !viewport.hasSize) return;
-    final viewportTop = viewport.localToGlobal(Offset.zero).dy;
+  Widget _buildZoomableMonthCalendar(String selected) {
+    final calendar = CustomScrollView(
+      key: listKey,
+      controller: scroll,
+      slivers: _buildMonthSlivers(selected),
+    );
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handlePointerDown,
+      onPointerMove: _handlePointerMove,
+      onPointerUp: _handlePointerEnd,
+      onPointerCancel: _handlePointerEnd,
+      child: calendar,
+    );
+  }
 
-    for (var index = 0; index < monthKeys.length; index++) {
-      final monthBox = monthKeys[index].currentContext?.findRenderObject();
-      if (monthBox is! RenderBox || !monthBox.hasSize) continue;
-      final monthTop = monthBox.localToGlobal(Offset.zero).dy;
-      final monthBottom = monthTop + monthBox.size.height;
-      if (monthBottom <= viewportTop + 1) continue;
-      final nextMonth = index + 1;
-      if (nextMonth != visibleMonth) {
-        setState(() => visibleMonth = nextMonth);
-      }
+  void _selectDate(DateTime date) {
+    if (pinchSessionActive) return;
+    widget.onSelected(date);
+    setState(() {
+      jumpMonth = date.month;
+      visibleMonth = date.month;
+    });
+    widget.onDayTap(date);
+  }
+
+  List<Widget> _buildMonthSlivers(String selected) => [
+    for (var month = 1; month <= 12; month++) ...[
+      SliverToBoxAdapter(
+        child: SizedBox(
+          key: monthKeys[month - 1],
+          height: _calendarMonthHeaderExtent,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 18, 6, 8),
+            child: Align(
+              alignment: Alignment.bottomLeft,
+              child: Text(
+                '$month月',
+                style: Theme.of(context).textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ),
+      ),
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        sliver: SliverFixedExtentList(
+          itemExtent: rowHeight,
+          delegate: SliverChildBuilderDelegate(
+            (context, week) => _CalendarWeekRow(
+              year: year,
+              month: month,
+              week: week,
+              controller: widget.controller,
+              selected: selected,
+              rowHeight: rowHeight,
+              todayKey: todayKey,
+              onSelected: _selectDate,
+            ),
+            childCount: _monthWeekCount(year, month),
+          ),
+        ),
+      ),
+      const SliverToBoxAdapter(
+        child: SizedBox(height: _calendarMonthFooterExtent),
+      ),
+    ],
+    const SliverToBoxAdapter(child: SizedBox(height: 110)),
+  ];
+
+  void _syncVisibleMonth() {
+    if (!mounted ||
+        weeklyCardView ||
+        pinchSessionActive ||
+        !scroll.hasClients) {
       return;
+    }
+    var offset = scroll.offset;
+    for (var month = 1; month <= 12; month++) {
+      final monthExtent =
+          _calendarMonthFixedExtent + _monthWeekCount(year, month) * rowHeight;
+      if (offset < monthExtent) {
+        if (month != visibleMonth) setState(() => visibleMonth = month);
+        return;
+      }
+      offset -= monthExtent;
     }
   }
 
   void _handlePointerDown(PointerDownEvent event) {
     scalePointers[event.pointer] = event.position;
-    if (scalePointers.length != 2) return;
+    if (scalePointers.length != 2 || !scroll.hasClients) return;
+    handoffPointer = null;
+    handoffPointerY = null;
+    handoffMoved = false;
+    _beginPinchSession();
     scaleStartDistance = _pointerDistance();
     scaleStartHeight = rowHeight;
     scaleDirection = 0;
-    setState(() => scaling = true);
+    final focalY = _scaleFocalViewportY();
+    if (focalY == null) return;
+    scaleAnchorDocumentY = scroll.offset + focalY;
+    scaling = true;
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
     if (!scalePointers.containsKey(event.pointer)) return;
     scalePointers[event.pointer] = event.position;
+    if (!scaling && event.pointer == handoffPointer) {
+      final previousY = handoffPointerY;
+      handoffPointerY = event.position.dy;
+      if (previousY != null) {
+        final delta = event.position.dy - previousY;
+        if (delta.abs() > .0001) {
+          handoffMoved = true;
+          scroll.applyHandoffUserOffset(delta);
+        }
+      }
+      return;
+    }
     if (!scaling || scalePointers.length < 2 || scaleStartDistance == 0) return;
-    _scheduleScaleFrame();
+    _schedulePointerScaleFrame();
   }
 
   void _handlePointerEnd(PointerEvent event) {
-    double? finalHeight;
-    if (scaling && scalePointers.length >= 2) {
-      scalePointers[event.pointer] = event.position;
-      finalHeight = _sampleScaleHeight();
-    }
     scalePointers.remove(event.pointer);
-    if (!scaling || scalePointers.length >= 2) return;
-    setState(() {
-      if (finalHeight != null) rowHeight = finalHeight;
-      scaling = false;
-    });
+    if (scalePointers.length < 2) {
+      _stopScaleInput();
+      if (scalePointers.isNotEmpty) {
+        final remainingPointer = scalePointers.entries.first;
+        handoffPointer = remainingPointer.key;
+        handoffPointerY = remainingPointer.value.dy;
+      }
+    }
+    if (!scalePointers.isEmpty) return;
+    handoffPointer = null;
+    handoffPointerY = null;
+    _completeScaleComputation();
+    _endPinchSessionAfterFrame();
+  }
+
+  void _beginPinchSession() {
+    if (!pinchSessionActive) {
+      pinchSessionGeneration++;
+      pinchSessionActive = true;
+      saveRowHeightAfterPinch = false;
+    }
+    scroll.setUserScrollLocked(true);
+  }
+
+  void _stopScaleInput() {
+    if (!scaling) return;
+    scaling = false;
+    scaleStartDistance = 0;
     scaleDirection = 0;
+  }
+
+  void _completeScaleComputation() {
+    saveRowHeightAfterPinch =
+        saveRowHeightAfterPinch ||
+        (rowHeight - preferenceHeightSeen).abs() > .0001;
     preferenceHeightSeen = rowHeight;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _syncVisibleMonth());
-    _saveScaledRowHeight();
+  }
+
+  void _endPinchSessionAfterFrame() {
+    if (!pinchSessionActive) return;
+    final generation = pinchSessionGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          generation != pinchSessionGeneration ||
+          scalePointers.isNotEmpty) {
+        return;
+      }
+      pinchSessionActive = false;
+      scroll.setUserScrollLocked(false);
+      if (handoffMoved) {
+        handoffMoved = false;
+        _syncVisibleMonth();
+      }
+      if (saveRowHeightAfterPinch) {
+        saveRowHeightAfterPinch = false;
+        _saveScaledRowHeight();
+      }
+    });
   }
 
   double _pointerDistance() {
     final points = scalePointers.values.take(2).toList();
     return (points[0] - points[1]).distance;
+  }
+
+  double? _scaleFocalViewportY() {
+    final viewport = listKey.currentContext?.findRenderObject();
+    if (viewport is! RenderBox || !viewport.hasSize) return null;
+    final points = scalePointers.values.take(2).toList();
+    if (points.length < 2) return null;
+    final globalFocalPoint = (points[0] + points[1]) / 2;
+    return viewport.globalToLocal(globalFocalPoint).dy;
+  }
+
+  double _mapDocumentYForRowHeight(
+    double documentY, {
+    required double fromHeight,
+    required double toHeight,
+  }) {
+    var oldY = documentY;
+    var newY = 0.0;
+    for (var month = 1; month <= 12; month++) {
+      final weekCount = _monthWeekCount(year, month);
+      final oldGridExtent = weekCount * fromHeight;
+      final newGridExtent = weekCount * toHeight;
+      final oldMonthExtent = _calendarMonthFixedExtent + oldGridExtent;
+      final newMonthExtent = _calendarMonthFixedExtent + newGridExtent;
+      if (oldY <= oldMonthExtent) {
+        if (oldY <= _calendarMonthHeaderExtent) return newY + oldY;
+        final gridY = oldY - _calendarMonthHeaderExtent;
+        if (gridY <= oldGridExtent) {
+          return newY +
+              _calendarMonthHeaderExtent +
+              gridY * (toHeight / fromHeight);
+        }
+        return newY +
+            _calendarMonthHeaderExtent +
+            newGridExtent +
+            (gridY - oldGridExtent);
+      }
+      oldY -= oldMonthExtent;
+      newY += newMonthExtent;
+    }
+    return newY + oldY;
   }
 
   double _boundedScaleHeight(double rawHeight) => rawHeight
@@ -334,8 +600,11 @@ class CalendarPageState extends State<CalendarPage>
 
   double? _sampleScaleHeight() {
     if (scalePointers.length < 2 || scaleStartDistance == 0) return null;
-    final rawHeight =
-        scaleStartHeight * (_pointerDistance() / scaleStartDistance);
+    return _sampleScaleHeightForRatio(_pointerDistance() / scaleStartDistance);
+  }
+
+  double? _sampleScaleHeightForRatio(double scaleRatio) {
+    final rawHeight = scaleStartHeight * scaleRatio;
     final nextHeight = _snapScaleHeightToPhysicalPixel(
       _boundedScaleHeight(rawHeight),
     );
@@ -353,16 +622,45 @@ class CalendarPageState extends State<CalendarPage>
     return nextHeight;
   }
 
-  void _scheduleScaleFrame() {
+  void _schedulePointerScaleFrame() {
     if (scaleFrameScheduled) return;
     scaleFrameScheduled = true;
     WidgetsBinding.instance.scheduleFrameCallback((_) {
       scaleFrameScheduled = false;
       if (!mounted || !scaling) return;
       final height = _sampleScaleHeight();
-      if (height == null) return;
-      setState(() => rowHeight = height);
+      final focalY = _scaleFocalViewportY();
+      if (height != null && focalY != null) {
+        _applyScaleHeight(height, focalY);
+      }
     });
+  }
+
+  void _applyScaleHeight(double height, double focalY) {
+    if (height == rowHeight) return;
+    final anchorDocumentY = _mapDocumentYForRowHeight(
+      scaleAnchorDocumentY,
+      fromHeight: scaleStartHeight,
+      toHeight: height,
+    );
+    final targetOffset = anchorDocumentY - focalY;
+    scroll.correctToOnNextDimensions(targetOffset);
+    final nextVisibleMonth = _monthForOffset(targetOffset, height);
+    setState(() {
+      rowHeight = height;
+      visibleMonth = nextVisibleMonth;
+    });
+  }
+
+  int _monthForOffset(double targetOffset, double height) {
+    var offset = targetOffset < 0 ? 0.0 : targetOffset;
+    for (var month = 1; month <= 12; month++) {
+      final monthExtent =
+          _calendarMonthFixedExtent + _monthWeekCount(year, month) * height;
+      if (offset < monthExtent) return month;
+      offset -= monthExtent;
+    }
+    return 12;
   }
 
   Future<void> _saveScaledRowHeight() async {
@@ -656,14 +954,20 @@ class _WeeklyDayCard extends StatelessWidget {
 DateTime _startOfWeek(DateTime date) =>
     DateTime(date.year, date.month, date.day - date.weekday + 1);
 
+int _monthWeekCount(int year, int month) {
+  final days = DateTime(year, month + 1, 0).day;
+  final leadingDays = DateTime(year, month, 1).weekday - 1;
+  return (leadingDays + days + 6) ~/ 7;
+}
+
 int _weekIndexForDate(int year, DateTime date) =>
     _startOfWeek(date).difference(_startOfWeek(DateTime(year))).inDays ~/ 7;
 
-class _Month extends StatelessWidget {
-  const _Month({
-    super.key,
+class _CalendarWeekRow extends StatelessWidget {
+  const _CalendarWeekRow({
     required this.year,
     required this.month,
+    required this.week,
     required this.controller,
     required this.selected,
     required this.rowHeight,
@@ -672,6 +976,7 @@ class _Month extends StatelessWidget {
   });
   final int year;
   final int month;
+  final int week;
   final AppController controller;
   final String selected;
   final double rowHeight;
@@ -685,146 +990,123 @@ class _Month extends StatelessWidget {
     final height = rowHeight;
     final planLimit = AppPreferences.estimatedCalendarItemCount(height);
     final markerSize = (height - 6).clamp(14, 25).toDouble();
-    final itemCount = offset + days;
-    return Padding(
-      padding: const EdgeInsets.only(top: 18, bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$month月',
-            style: Theme.of(context).textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          GridView.builder(
-            shrinkWrap: true,
-            primary: false,
-            padding: EdgeInsets.zero,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 7,
-              mainAxisExtent: height,
-            ),
-            itemCount: itemCount,
-            itemBuilder: (context, index) {
-              if (index < offset) return const SizedBox.shrink();
-              final day = index - offset + 1;
-              final date = DateTime(year, month, day);
-              final text = dateOnly(date);
-              final plans =
-                  controller.plans
-                      .where((plan) => _planIncludesDate(plan, text))
-                      .toList()
-                    ..sort((a, b) => a.name.compareTo(b.name));
-              final today = dateOnly(DateTime.now()) == text;
-              final active = selected == text;
-              return InkWell(
-                key: today ? todayKey : null,
-                onTap: () => onSelected(date),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 1,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: active
-                        ? Theme.of(context).colorScheme.primaryContainer
-                        : null,
-                    border: Border(
-                      top: BorderSide(color: Theme.of(context).dividerColor),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Align(
-                        alignment: Alignment.topCenter,
-                        child: Container(
-                          width: markerSize,
-                          height: markerSize,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: today
-                                ? Theme.of(context).colorScheme.primary
-                                : null,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            '$day',
-                            style: TextStyle(
-                              color: today
-                                  ? Theme.of(context).colorScheme.onPrimary
-                                  : null,
-                              fontSize: markerSize < 20
-                                  ? 9
-                                  : plans.isEmpty
-                                  ? 15
-                                  : 12,
-                            ),
-                          ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: List.generate(7, (weekday) {
+        final index = week * 7 + weekday;
+        final day = index - offset + 1;
+        if (day < 1 || day > days) return const Expanded(child: SizedBox());
+        final date = DateTime(year, month, day);
+        final text = dateOnly(date);
+        final plans =
+            controller.plans
+                .where((plan) => _planIncludesDate(plan, text))
+                .toList()
+              ..sort((a, b) => a.name.compareTo(b.name));
+        final today = dateOnly(DateTime.now()) == text;
+        final active = selected == text;
+        return Expanded(
+          child: InkWell(
+            key: today ? todayKey : null,
+            onTap: () => onSelected(date),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 3),
+              decoration: BoxDecoration(
+                color: active
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : null,
+                border: Border(
+                  top: BorderSide(color: Theme.of(context).dividerColor),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Align(
+                    alignment: Alignment.topCenter,
+                    child: Container(
+                      width: markerSize,
+                      height: markerSize,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: today
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '$day',
+                        style: TextStyle(
+                          color: today
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : null,
+                          fontSize: markerSize < 20
+                              ? 9
+                              : plans.isEmpty
+                              ? 15
+                              : 12,
                         ),
                       ),
-                      if (planLimit == 0 && plans.isNotEmpty && height >= 32)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 3),
-                          child: Align(
-                            alignment: Alignment.center,
-                            child: Wrap(
-                              spacing: 3,
-                              children: plans.take(4).map((plan) {
-                                final color =
-                                    plan.progress.currentNode?.color ??
-                                    Color(plan.categoryColorValue);
-                                return Container(
-                                  width: 5,
-                                  height: 5,
-                                  decoration: BoxDecoration(
-                                    color: color,
-                                    shape: BoxShape.circle,
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ),
-                      ...plans.take(planLimit).map((plan) {
-                        final color =
-                            plan.progress.currentNode?.color ??
-                            Color(plan.categoryColorValue);
-                        return Container(
-                          width: double.infinity,
-                          margin: const EdgeInsets.only(top: 3),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 2,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: color.withAlpha(30),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: _CalendarPlanLabel(
-                            plan: plan,
-                            style: const TextStyle(fontSize: 8),
-                          ),
-                        );
-                      }),
-                      if (plans.length > planLimit && height >= 42)
-                        Align(
-                          alignment: Alignment.center,
-                          child: Text(
-                            '+${plans.length - planLimit} 项',
-                            style: const TextStyle(fontSize: 8),
-                          ),
-                        ),
-                    ],
+                    ),
                   ),
-                ),
-              );
-            },
+                  if (planLimit == 0 && plans.isNotEmpty && height >= 32)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Align(
+                        alignment: Alignment.center,
+                        child: Wrap(
+                          spacing: 3,
+                          children: plans.take(4).map((plan) {
+                            final color =
+                                plan.progress.currentNode?.color ??
+                                Color(plan.categoryColorValue);
+                            return Container(
+                              width: 5,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: color,
+                                shape: BoxShape.circle,
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ...plans.take(planLimit).map((plan) {
+                    final color =
+                        plan.progress.currentNode?.color ??
+                        Color(plan.categoryColorValue);
+                    return Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(top: 3),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 2,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withAlpha(30),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: _CalendarPlanLabel(
+                        plan: plan,
+                        style: const TextStyle(fontSize: 8),
+                      ),
+                    );
+                  }),
+                  if (plans.length > planLimit && height >= 42)
+                    Align(
+                      alignment: Alignment.center,
+                      child: Text(
+                        '+${plans.length - planLimit} 项',
+                        style: const TextStyle(fontSize: 8),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
-        ],
-      ),
+        );
+      }),
     );
   }
 }
@@ -860,7 +1142,7 @@ class _CalendarPlanLabel extends StatelessWidget {
             child: IgnorePointer(
               child: Align(
                 alignment: Alignment.center,
-                child: Container(height: 1.5, color: completedColor),
+                child: Container(height: 1, color: completedColor),
               ),
             ),
           ),
