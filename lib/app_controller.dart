@@ -142,6 +142,14 @@ class AppController extends ChangeNotifier {
     return null;
   }
 
+  PlanItem? planById(String? id) {
+    if (id == null) return null;
+    for (final plan in plans) {
+      if (plan.id == id) return plan;
+    }
+    return null;
+  }
+
   int compareTasks(TaskItem a, TaskItem b) {
     final dateCompare = (a.startDate.isEmpty ? '9999' : a.startDate).compareTo(
       b.startDate.isEmpty ? '9999' : b.startDate,
@@ -291,13 +299,8 @@ class AppController extends ChangeNotifier {
     final limitedHeight = height
         .clamp(1.0, AppPreferences.maximumCalendarWeeklyCardHeight)
         .toDouble();
-    await db.savePreference(
-      'calendar_weekly_card_height',
-      '$limitedHeight',
-    );
-    preferences = preferences.copyWith(
-      calendarWeeklyCardHeight: limitedHeight,
-    );
+    await db.savePreference('calendar_weekly_card_height', '$limitedHeight');
+    preferences = preferences.copyWith(calendarWeeklyCardHeight: limitedHeight);
     notifyListeners();
   }
 
@@ -501,6 +504,36 @@ class AppController extends ChangeNotifier {
         progressTemplates.map((item) => item.name),
         historicalNames,
       );
+
+  List<String> progressNodeNamesForTemplate(
+    String templateName,
+    Iterable<ProgressSnapshot> historicalProgress,
+  ) {
+    if (templateName.isEmpty) return const [];
+
+    final result = <String>[];
+    final seen = <String>{};
+    for (final template in progressTemplates) {
+      if (template.name != templateName) continue;
+      for (final node in template.nodes) {
+        if (node.name.isNotEmpty && seen.add(node.name)) {
+          result.add(node.name);
+        }
+      }
+    }
+
+    final historicalNames =
+        historicalProgress
+            .where((progress) => progress.templateName == templateName)
+            .expand((progress) => progress.nodes)
+            .map((node) => node.name)
+            .where((name) => name.isNotEmpty && !seen.contains(name))
+            .toSet()
+            .toList()
+          ..sort();
+    result.addAll(historicalNames);
+    return result;
+  }
 
   List<String> orderedTagNames(Iterable<String> historicalNames) =>
       _orderedDefinitionNames(
@@ -842,6 +875,30 @@ class AppController extends ChangeNotifier {
       if (existing == null || overwriteIds.contains(task.id)) {
         await db.saveTask(_withSnapshots(task));
       }
+    }
+    await reload();
+    await _reconcileReminders();
+  }
+
+  Future<void> importPlans(List<PlanItem> imported) async {
+    for (final plan in imported) {
+      if (plan.name.trim().isEmpty) {
+        throw StateError('导入的计划名称不能为空。');
+      }
+      if (plan.name.trim().characters.length > 100) {
+        throw StateError('计划“${plan.name}”名称超过 100 个字符。');
+      }
+      if (plan.description.characters.length > 200) {
+        throw StateError('计划“${plan.name}”内容超过 200 个字符。');
+      }
+      if (plan.startDate.isNotEmpty &&
+          plan.targetDate.isNotEmpty &&
+          plan.startDate.compareTo(plan.targetDate) > 0) {
+        throw StateError('计划“${plan.name}”的开始日期晚于目标日期。');
+      }
+    }
+    for (final plan in imported) {
+      await db.savePlan(plan);
     }
     await reload();
     await _reconcileReminders();

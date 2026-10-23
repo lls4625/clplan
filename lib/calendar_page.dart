@@ -233,16 +233,19 @@ class CalendarPageState extends State<CalendarPage>
   void toggleCalendarView() {
     final showWeeklyCards = !weeklyCardView;
     final now = DateTime.now();
+    if (!showWeeklyCards && scroll.hasClients) {
+      scroll.correctToOnNextDimensions(
+        _monthOffsetForDate(now, alignment: .25),
+      );
+    }
     setState(() {
       weeklyCardView = showWeeklyCards;
-      if (showWeeklyCards) {
-        year = now.year;
-        jumpMonth = now.month;
-        visibleMonth = now.month;
-      }
+      year = now.year;
+      jumpMonth = now.month;
+      visibleMonth = now.month;
     });
+    widget.onSelected(now);
     if (showWeeklyCards) {
-      widget.onSelected(now);
       _revealCurrentWeek(animate: false);
     } else {
       _revealKey(todayKey, now.month - 1, alignment: .25, animate: false);
@@ -977,6 +980,25 @@ class CalendarPageState extends State<CalendarPage>
       offset -= monthExtent;
     }
     return 12;
+  }
+
+  double _monthOffsetForDate(
+    DateTime date, {
+    required double alignment,
+  }) {
+    var targetOffset = 0.0;
+    for (var month = 1; month < date.month; month++) {
+      targetOffset +=
+          _calendarMonthFixedExtent +
+          _monthWeekCount(date.year, month) * rowHeight;
+    }
+
+    final leadingDays = DateTime(date.year, date.month, 1).weekday - 1;
+    final weekIndex = (leadingDays + date.day - 1) ~/ 7;
+    targetOffset += _calendarMonthHeaderExtent + weekIndex * rowHeight;
+
+    final viewportExtent = scroll.position.viewportDimension;
+    return targetOffset - (viewportExtent - rowHeight) * alignment;
   }
 
   Future<void> _saveScaledRowHeight() async {

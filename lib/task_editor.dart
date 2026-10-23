@@ -6,6 +6,7 @@ import 'contact_widgets.dart';
 import 'models.dart';
 import 'notification_service.dart';
 import 'task_widgets.dart';
+import 'work_form_widgets.dart';
 
 Future<bool?> showTaskEditor(
   BuildContext context,
@@ -24,16 +25,8 @@ Future<bool?> showTaskEditor(
     originId: originId,
     initialPlanId: initialPlanId,
   );
-  if (task == null) {
-    return Navigator.of(context).push<bool>(
-      MaterialPageRoute(fullscreenDialog: true, builder: (_) => editor),
-    );
-  }
-  return showModalBottomSheet<bool>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    builder: (_) => FractionallySizedBox(heightFactor: .94, child: editor),
+  return Navigator.of(context).push<bool>(
+    MaterialPageRoute(fullscreenDialog: true, builder: (_) => editor),
   );
 }
 
@@ -59,6 +52,7 @@ class TaskEditor extends StatefulWidget {
 
 class _TaskEditorState extends State<TaskEditor> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
+  final formKey = GlobalKey<FormState>();
   late final TextEditingController title;
   late final TextEditingController description;
   late final TextEditingController type;
@@ -177,11 +171,15 @@ class _TaskEditorState extends State<TaskEditor> {
     }
   }
 
+  void _clearSchedule() => setState(() {
+    startDate = '';
+    startTime = '';
+    reminders.removeWhere((item) => item.type != ReminderRuleType.absolute);
+    reminderEnabled = reminders.isNotEmpty;
+  });
+
   Future<void> _save({bool next = false, bool nextAsChild = false}) async {
-    if (!readOnly && title.text.trim().isEmpty) {
-      _message('请输入标题。');
-      return;
-    }
+    if (!readOnly && !(formKey.currentState?.validate() ?? false)) return;
     if (startDate.isEmpty && startTime.isNotEmpty) {
       _message('设置时间前需要选择日期。');
       return;
@@ -367,13 +365,28 @@ class _TaskEditorState extends State<TaskEditor> {
       key: scaffoldKey,
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
+        centerTitle: true,
         title: Text(pageTitle),
         actions: [
           if (widget.task != null && !readOnly && !hasChildren)
-            IconButton(
-              tooltip: '删除任务',
-              onPressed: _deleteTask,
-              icon: const Icon(Icons.delete_outline),
+            PopupMenuButton<String>(
+              tooltip: '更多操作',
+              enabled: !saving,
+              onSelected: (value) {
+                if (value == 'delete') _deleteTask();
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_outline),
+                      SizedBox(width: 10),
+                      Text('删除任务'),
+                    ],
+                  ),
+                ),
+              ],
             ),
           if (!readOnly)
             IconButton(
@@ -390,262 +403,324 @@ class _TaskEditorState extends State<TaskEditor> {
       ),
       endDrawer: _buildTagDrawer(context),
       body: SafeArea(
-        child: ListView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: EdgeInsets.fromLTRB(
-            20,
-            16,
-            20,
-            24 + MediaQuery.viewInsetsOf(context).bottom,
-          ),
-          children: [
-            if (owningPlan != null) ...[
-              InputDecorator(
-                decoration: const InputDecoration(labelText: '所属计划'),
-                child: Text(owningPlan.name),
-              ),
-              const SizedBox(height: 10),
-            ],
-            if (readOnly) const _Notice(text: '完成记录只读。你可以更改状态，重新开启后再编辑内容。'),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: readOnly ? null : _pickDate,
-                    icon: const Icon(Icons.calendar_today_outlined),
-                    label: Text(startDate.isEmpty ? '未安排日期' : startDate),
-                  ),
+        child: Form(
+          key: formKey,
+          autovalidateMode: AutovalidateMode.onUnfocus,
+          child: CustomScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  12,
+                  16,
+                  28 + MediaQuery.viewInsetsOf(context).bottom,
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: readOnly || startDate.isEmpty ? null : _pickTime,
-                    icon: const Icon(Icons.schedule),
-                    label: Text(startTime.isEmpty ? '未设置时间' : startTime),
-                  ),
-                ),
-                if (!readOnly && startDate.isNotEmpty)
-                  IconButton(
-                    onPressed: () => setState(() {
-                      startDate = '';
-                      startTime = '';
-                      reminders.removeWhere(
-                        (item) => item.type != ReminderRuleType.absolute,
-                      );
-                      reminderEnabled = reminders.isNotEmpty;
-                    }),
-                    icon: const Icon(Icons.clear),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            _buildReminderCard(context),
-            const SizedBox(height: 10),
-            TextField(
-              controller: title,
-              readOnly: readOnly,
-              maxLength: 100,
-              scrollPadding: const EdgeInsets.only(bottom: 160),
-              decoration: const InputDecoration(labelText: '标题'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: description,
-              readOnly: readOnly,
-              maxLines: 3,
-              maxLength: 200,
-              scrollPadding: const EdgeInsets.only(bottom: 160),
-              decoration: const InputDecoration(labelText: '内容'),
-            ),
-            const SizedBox(height: 10),
-            _buildContacts(context),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              initialValue:
-                  widget.controller.categoryDefinitions.any(
-                    (item) => item.name == type.text,
-                  )
-                  ? type.text
-                  : (type.text.isEmpty ? null : type.text),
-              decoration: const InputDecoration(labelText: '分类'),
-              items: [
-                ...widget.controller.categoryDefinitions.map(
-                  (category) => DropdownMenuItem(
-                    value: category.name,
-                    child: Row(
+                sliver: SliverList.list(
+                  children: [
+                    if (readOnly) ...[
+                      const _Notice(text: '完成记录只读。可更改进度节点重新开启后再编辑。'),
+                      const SizedBox(height: 16),
+                    ],
+                    WorkFormSection(
+                      title: '基本信息',
+                      icon: Icons.description_outlined,
                       children: [
-                        Icon(category.icon, color: category.color, size: 18),
-                        const SizedBox(width: 8),
-                        Text(category.name),
+                        if (owningPlan != null)
+                          WorkValueField(
+                            label: '所属计划',
+                            value: owningPlan.name,
+                            icon: Icons.folder_outlined,
+                          ),
+                        if (widget.task?.parentTaskId != null)
+                          WorkValueField(
+                            label: '上级任务',
+                            value:
+                                widget.controller
+                                    .taskById(widget.task!.parentTaskId)
+                                    ?.title ??
+                                '上级任务已不存在',
+                            icon: Icons.account_tree_outlined,
+                          ),
+                        if (readOnly)
+                          WorkValueField(label: '标题', value: title.text)
+                        else
+                          TextFormField(
+                            controller: title,
+                            maxLength: 100,
+                            textInputAction: TextInputAction.next,
+                            scrollPadding: const EdgeInsets.only(bottom: 160),
+                            decoration: const InputDecoration(
+                              labelText: '标题',
+                              alignLabelWithHint: true,
+                            ),
+                            validator: (value) =>
+                                (value ?? '').trim().isEmpty ? '请输入标题' : null,
+                          ),
+                        if (readOnly)
+                          WorkValueField(label: '内容', value: description.text)
+                        else
+                          TextFormField(
+                            controller: description,
+                            minLines: 3,
+                            maxLines: null,
+                            maxLength: 200,
+                            scrollPadding: const EdgeInsets.only(bottom: 160),
+                            decoration: const InputDecoration(
+                              labelText: '内容',
+                              alignLabelWithHint: true,
+                            ),
+                          ),
                       ],
                     ),
-                  ),
-                ),
-                if (type.text.isNotEmpty &&
-                    !widget.controller.categoryDefinitions.any(
-                      (category) => category.name == type.text,
-                    ))
-                  DropdownMenuItem(
-                    value: type.text,
-                    child: Text('${type.text}（历史分类）'),
-                  ),
-              ],
-              onChanged: readOnly
-                  ? null
-                  : (value) => setState(() => type.text = value ?? ''),
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              initialValue: progress.sourceTemplateId,
-              decoration: const InputDecoration(labelText: '进度方案'),
-              items: [
-                ...widget.controller.progressTemplates.map(
-                  (template) => DropdownMenuItem<String>(
-                    value: template.id,
-                    child: Text(template.name),
-                  ),
-                ),
-                if (progress.sourceTemplateId != null &&
-                    !widget.controller.progressTemplates.any(
-                      (template) => template.id == progress.sourceTemplateId,
-                    ))
-                  DropdownMenuItem<String>(
-                    value: progress.sourceTemplateId!,
-                    child: Text('${progress.templateName}（历史方案）'),
-                  ),
-              ],
-              onChanged: readOnly
-                  ? null
-                  : (value) => setState(() {
-                      final id =
-                          widget.task?.id ??
-                          progress.instanceId.replaceFirst(
-                            'task-progress-',
-                            '',
-                          );
-                      progress = widget.controller.progressSnapshotForTask(
-                        id,
-                        templateId: value,
-                      );
-                    }),
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              key: ValueKey(
-                '${progress.sourceTemplateId}-${progress.currentNodeId}',
-              ),
-              initialValue: progress.currentNodeId,
-              decoration: const InputDecoration(labelText: '进度节点'),
-              items: progress.nodes
-                  .map(
-                    (node) => DropdownMenuItem(
-                      value: node.id,
-                      child: Text(node.name),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) => setState(() {
-                progress = progress.copyWith(currentNodeId: value);
-                final completed = progress.completed;
-                statusId = widget.controller.statuses
-                    .firstWhere(
-                      (status) => status.completed == completed,
-                      orElse: () => widget.controller.statuses.first,
-                    )
-                    .id;
-              }),
-            ),
-            const SizedBox(height: 10),
-            if (widget.task?.parentTaskId != null) ...[
-              InputDecorator(
-                decoration: const InputDecoration(labelText: '历史上级任务'),
-                child: Text(
-                  widget.controller
-                          .taskById(widget.task!.parentTaskId)
-                          ?.title ??
-                      '上级任务已不存在',
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
-            _buildTags(context),
-            if (!readOnly) ...[
-              const SizedBox(height: 10),
-              TextField(
-                controller: reason,
-                scrollPadding: const EdgeInsets.only(bottom: 160),
-                decoration: const InputDecoration(labelText: '未完成主要原因'),
-              ),
-            ],
-            if (widget.task != null) ...[
-              const SizedBox(height: 20),
-              Text(
-                '跟进记录',
-                style: Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              if (widget.task!.followups.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10),
-                  child: Text('还没有跟进记录'),
-                ),
-              ...widget.task!.followups.map(
-                (item) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(item.text),
-                  subtitle: Text(
-                    DateFormat('yyyy-MM-dd HH:mm').format(item.at.toLocal()),
-                  ),
-                ),
-              ),
-              if (!readOnly)
-                TextField(
-                  controller: followup,
-                  maxLines: 2,
-                  scrollPadding: const EdgeInsets.only(bottom: 160),
-                  decoration: const InputDecoration(labelText: '追加跟进'),
-                ),
-              if (widget.task!.history.isNotEmpty)
-                ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  title: Text('变更历史（${widget.task!.history.length}）'),
-                  children: widget.task!.history
-                      .map(
-                        (item) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(item.text),
-                          subtitle: Text(
-                            DateFormat('yyyy-MM-dd HH:mm')
-                                .format(item.at.toLocal()),
+                    const SizedBox(height: 16),
+                    WorkFormSection(
+                      title: '时间与提醒',
+                      icon: Icons.calendar_month_outlined,
+                      subtitle: reminders.isEmpty
+                          ? '未设置提醒'
+                          : '${reminders.length} 个提醒',
+                      children: [
+                        ResponsiveFieldPair(
+                          first: WorkValueField(
+                            label: '日期',
+                            value: startDate,
+                            icon: Icons.event_outlined,
+                            enabled: !readOnly,
+                            onTap: readOnly ? null : _pickDate,
+                          ),
+                          second: WorkValueField(
+                            label: '时间',
+                            value: startTime,
+                            icon: Icons.schedule_outlined,
+                            enabled: !readOnly && startDate.isNotEmpty,
+                            onTap: readOnly || startDate.isEmpty
+                                ? null
+                                : _pickTime,
                           ),
                         ),
-                      )
-                      .toList(),
+                        if (!readOnly && startDate.isNotEmpty)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: _clearSchedule,
+                              icon: const Icon(Icons.event_busy_outlined),
+                              label: const Text('清除日期和时间'),
+                            ),
+                          ),
+                        _buildReminderCard(context),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    WorkFormSection(
+                      title: '联系人',
+                      icon: Icons.people_outline,
+                      subtitle: selectedContacts.isEmpty
+                          ? '未选择'
+                          : '${selectedContacts.length} 人',
+                      children: [_buildContacts(context)],
+                    ),
+                    const SizedBox(height: 16),
+                    WorkFormSection(
+                      title: '分类与进度',
+                      icon: Icons.account_tree_outlined,
+                      children: [
+                        if (readOnly)
+                          WorkValueField(label: '分类', value: type.text)
+                        else
+                          DropdownMenu<String>(
+                            expandedInsets: EdgeInsets.zero,
+                            label: const Text('分类'),
+                            initialSelection: type.text.isEmpty
+                                ? null
+                                : type.text,
+                            dropdownMenuEntries: [
+                              ...widget.controller.categoryDefinitions.map(
+                                (item) => DropdownMenuEntry(
+                                  value: item.name,
+                                  label: item.name,
+                                  leadingIcon: Icon(
+                                    item.icon,
+                                    color: item.color,
+                                  ),
+                                ),
+                              ),
+                              if (type.text.isNotEmpty &&
+                                  !widget.controller.categoryDefinitions.any(
+                                    (item) => item.name == type.text,
+                                  ))
+                                DropdownMenuEntry(
+                                  value: type.text,
+                                  label: '${type.text}（历史分类）',
+                                ),
+                            ],
+                            onSelected: (value) =>
+                                setState(() => type.text = value ?? ''),
+                          ),
+                        if (readOnly)
+                          WorkValueField(
+                            label: '进度方案',
+                            value: progress.templateName,
+                          )
+                        else
+                          DropdownMenu<String>(
+                            expandedInsets: EdgeInsets.zero,
+                            label: const Text('进度方案'),
+                            initialSelection: progress.sourceTemplateId,
+                            dropdownMenuEntries: [
+                              ...widget.controller.progressTemplates.map(
+                                (item) => DropdownMenuEntry(
+                                  value: item.id,
+                                  label: item.name,
+                                ),
+                              ),
+                              if (progress.sourceTemplateId != null &&
+                                  !widget.controller.progressTemplates.any(
+                                    (item) =>
+                                        item.id == progress.sourceTemplateId,
+                                  ))
+                                DropdownMenuEntry(
+                                  value: progress.sourceTemplateId!,
+                                  label: '${progress.templateName}（历史方案）',
+                                ),
+                            ],
+                            onSelected: (value) => setState(() {
+                              final id =
+                                  widget.task?.id ??
+                                  progress.instanceId.replaceFirst(
+                                    'task-progress-',
+                                    '',
+                                  );
+                              progress = widget.controller
+                                  .progressSnapshotForTask(
+                                    id,
+                                    templateId: value,
+                                  );
+                            }),
+                          ),
+                        DropdownMenu<String>(
+                          key: ValueKey(
+                            '${progress.sourceTemplateId}-${progress.currentNodeId}',
+                          ),
+                          expandedInsets: EdgeInsets.zero,
+                          label: const Text('进度节点'),
+                          initialSelection: progress.currentNodeId,
+                          dropdownMenuEntries: progress.nodes
+                              .map(
+                                (item) => DropdownMenuEntry(
+                                  value: item.id,
+                                  label: item.name,
+                                ),
+                              )
+                              .toList(),
+                          onSelected: (value) => setState(() {
+                            progress = progress.copyWith(currentNodeId: value);
+                            final completed = progress.completed;
+                            statusId = widget.controller.statuses
+                                .firstWhere(
+                                  (status) => status.completed == completed,
+                                  orElse: () =>
+                                      widget.controller.statuses.first,
+                                )
+                                .id;
+                          }),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    WorkFormSection(
+                      title: '标签',
+                      icon: Icons.sell_outlined,
+                      subtitle: selectedTags.isEmpty
+                          ? '未选择'
+                          : '${selectedTags.length} 个标签',
+                      children: [_buildTags(context)],
+                    ),
+                    const SizedBox(height: 16),
+                    WorkFormSection(
+                      title: '执行补充',
+                      icon: Icons.assignment_late_outlined,
+                      children: [
+                        if (readOnly)
+                          WorkValueField(label: '未完成主要原因', value: reason.text)
+                        else
+                          TextFormField(
+                            controller: reason,
+                            minLines: 2,
+                            maxLines: null,
+                            scrollPadding: const EdgeInsets.only(bottom: 160),
+                            decoration: const InputDecoration(
+                              labelText: '未完成主要原因',
+                              alignLabelWithHint: true,
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (widget.task != null) ...[
+                      const SizedBox(height: 16),
+                      WorkFormSection(
+                        title: '跟进记录',
+                        icon: Icons.forum_outlined,
+                        subtitle: '${widget.task!.followups.length} 条',
+                        children: [
+                          if (widget.task!.followups.isEmpty)
+                            const Text('还没有跟进记录')
+                          else
+                            ...widget.task!.followups.map(
+                              (item) => WorkActivityItem(
+                                text: item.text,
+                                time: DateFormat('yyyy-MM-dd HH:mm')
+                                    .format(item.at.toLocal()),
+                              ),
+                            ),
+                          if (!readOnly)
+                            TextFormField(
+                              controller: followup,
+                              minLines: 2,
+                              maxLines: null,
+                              scrollPadding: const EdgeInsets.only(bottom: 160),
+                              decoration: const InputDecoration(
+                                labelText: '追加跟进',
+                                alignLabelWithHint: true,
+                              ),
+                            ),
+                        ],
+                      ),
+                      if (widget.task!.history.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        WorkFormSection(
+                          title: '变更历史',
+                          icon: Icons.history_outlined,
+                          subtitle: '${widget.task!.history.length} 条',
+                          children: widget.task!.history
+                              .map(
+                                (item) => WorkActivityItem(
+                                  text: item.text,
+                                  time: DateFormat('yyyy-MM-dd HH:mm')
+                                      .format(item.at.toLocal()),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ],
+                    ],
+                    const SizedBox(height: 20),
+                    if (widget.task != null && !readOnly)
+                      OutlinedButton.icon(
+                        onPressed: saving ? null : () => _save(next: true),
+                        icon: const Icon(Icons.add_task_outlined),
+                        label: const Text('保存并建下一项'),
+                      ),
+                    if (readOnly)
+                      FilledButton(
+                        onPressed: saving ? null : _save,
+                        child: Text(saving ? '保存中…' : '更改状态'),
+                      ),
+                  ],
                 ),
-            ],
-            const SizedBox(height: 20),
-            if (widget.task != null && !readOnly)
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton(
-                    onPressed: saving ? null : () => _save(next: true),
-                    child: const Text('保存并建下一项'),
-                  ),
-                ],
-              ),
-            if (readOnly) ...[
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: saving ? null : _save,
-                  child: Text(saving ? '保存中…' : '更改状态'),
-                ),
               ),
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -659,56 +734,43 @@ class _TaskEditorState extends State<TaskEditor> {
     final hasNotificationReminders = reminders.any(
       (item) => item.deliveryType == ReminderDeliveryType.notification,
     );
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: reminderEnabled,
-              secondary: const Icon(Icons.notifications_none),
-              title: const Text('提醒'),
-              subtitle: Text(
-                reminders.isEmpty
-                    ? '可设置一次或多个提醒时间'
-                    : '${reminders.length} 个提醒${permissionDisabled ? ' · 系统通知未开启' : ''}',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: reminderEnabled,
+          secondary: const Icon(Icons.notifications_none),
+          title: const Text('提醒'),
+          subtitle: Text(
+            reminders.isEmpty
+                ? '可设置一次或多个提醒时间'
+                : '${reminders.length} 个提醒${permissionDisabled ? ' · 系统通知未开启' : ''}',
+          ),
+          onChanged: readOnly
+              ? null
+              : (value) => setState(() => reminderEnabled = value),
+        ),
+        if (reminderEnabled || reminders.isNotEmpty) ...[
+          if (!hasTaskTime)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 10),
+              child: Text(
+                '设置任务日期和时间后可使用快捷提醒；也可添加一个独立的指定时间。',
+                style: TextStyle(fontSize: 12),
               ),
-              onChanged: readOnly
-                  ? null
-                  : (value) => setState(() => reminderEnabled = value),
             ),
-            if (reminderEnabled) ...[
-              if (!hasTaskTime)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 10),
-                  child: Text(
-                    '设置任务日期和时间后可使用快捷提醒；也可添加一个独立的指定时间。',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: EdgeInsets.zero,
-                itemCount: 5,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 7,
-                  mainAxisSpacing: 7,
-                  mainAxisExtent: 44,
-                ),
-                itemBuilder: (context, index) {
-                  const quickReminders = [
-                    (0, '准时'),
-                    (5, '5 分钟前'),
-                    (30, '30 分钟前'),
-                    (60, '1 小时前'),
-                    (1440, '1 天前'),
-                  ];
-                  final entry = quickReminders[index];
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children:
+                const [
+                  (0, '准时'),
+                  (5, '5 分钟前'),
+                  (30, '30 分钟前'),
+                  (60, '1 小时前'),
+                  (1440, '1 天前'),
+                ].map((entry) {
                   return FilterChip(
                     label: Text(entry.$2),
                     selected: reminders.any(
@@ -718,118 +780,115 @@ class _TaskEditorState extends State<TaskEditor> {
                           item.deliveryType ==
                               ReminderDeliveryType.notification,
                     ),
-                    onSelected: readOnly || !hasTaskTime
+                    onSelected: readOnly || !reminderEnabled || !hasTaskTime
                         ? null
                         : (_) => _toggleQuickReminder(entry.$1),
                   );
-                },
+                }).toList(),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: readOnly || !reminderEnabled
+                      ? null
+                      : () => _showAddReminder(
+                          context,
+                          ReminderDeliveryType.notification,
+                        ),
+                  icon: const Icon(Icons.notifications_none),
+                  label: const Text('通知提醒'),
+                ),
               ),
-              const SizedBox(height: 10),
-              Row(
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: readOnly || !reminderEnabled
+                      ? null
+                      : () => _showAddReminder(
+                          context,
+                          ReminderDeliveryType.alarm,
+                        ),
+                  icon: const Icon(Icons.alarm_outlined),
+                  label: const Text('闹铃提醒'),
+                ),
+              ),
+            ],
+          ),
+          if (reminders.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ...reminders.map((rule) {
+              final fireAt = rule.fireDateFor(
+                startDate: startDate,
+                startTime: startTime,
+              );
+              final expired = fireAt != null && fireAt.isBefore(DateTime.now());
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  rule.deliveryType == ReminderDeliveryType.alarm
+                      ? Icons.alarm_outlined
+                      : Icons.notifications_none,
+                ),
+                title: Text('${rule.deliveryLabel} · ${rule.label}'),
+                subtitle: fireAt == null
+                    ? const Text('等待任务时间')
+                    : Text(
+                        expired
+                            ? '已过期，不会再提醒'
+                            : DateFormat('yyyy-MM-dd HH:mm').format(fireAt),
+                      ),
+                trailing: readOnly
+                    ? null
+                    : IconButton(
+                        tooltip: '删除提醒',
+                        onPressed: () => setState(() {
+                          reminders.remove(rule);
+                          if (reminders.isEmpty) reminderEnabled = false;
+                        }),
+                        icon: const Icon(Icons.close),
+                      ),
+              );
+            }),
+          ],
+          if (permissionDisabled && hasNotificationReminders)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: readOnly
-                          ? null
-                          : () => _showAddReminder(
-                              context,
-                              ReminderDeliveryType.notification,
-                            ),
-                      icon: const Icon(Icons.notifications_none),
-                      label: const Text('通知提醒'),
+                  const Expanded(
+                    child: Text(
+                      '提醒会保存，但需在系统设置中允许通知后才会生效。',
+                      style: TextStyle(fontSize: 12),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: readOnly
-                          ? null
-                          : () => _showAddReminder(
-                              context,
-                              ReminderDeliveryType.alarm,
-                            ),
-                      icon: const Icon(Icons.alarm_outlined),
-                      label: const Text('闹铃提醒'),
-                    ),
+                  TextButton(
+                    onPressed: widget.controller.openReminderSettings,
+                    child: const Text('去设置'),
                   ),
                 ],
               ),
-              if (reminders.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                ...reminders.map((rule) {
-                  final fireAt = rule.fireDateFor(
-                    startDate: startDate,
-                    startTime: startTime,
-                  );
-                  final expired =
-                      fireAt != null && fireAt.isBefore(DateTime.now());
-                  return ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      rule.deliveryType == ReminderDeliveryType.alarm
-                          ? Icons.alarm_outlined
-                          : Icons.notifications_none,
-                    ),
-                    title: Text('${rule.deliveryLabel} · ${rule.label}'),
-                    subtitle: fireAt == null
-                        ? const Text('等待任务时间')
-                        : Text(
-                            expired
-                                ? '已过期，不会再提醒'
-                                : DateFormat('yyyy-MM-dd HH:mm').format(fireAt),
-                          ),
-                    trailing: readOnly
-                        ? null
-                        : IconButton(
-                            tooltip: '删除提醒',
-                            onPressed: () => setState(() {
-                              reminders.remove(rule);
-                              if (reminders.isEmpty) reminderEnabled = false;
-                            }),
-                            icon: const Icon(Icons.close),
-                          ),
-                  );
-                }),
-              ],
-              if (permissionDisabled && hasNotificationReminders)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          '提醒会保存，但需在系统设置中允许通知后才会生效。',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: widget.controller.openReminderSettings,
-                        child: const Text('去设置'),
-                      ),
-                    ],
-                  ),
-                ),
-              if (reminders.any(
-                (item) => item.deliveryType == ReminderDeliveryType.alarm,
-              ))
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    widget.controller.alarmPermission ==
-                            AlarmPermissionState.unsupported
-                        ? '当前系统不支持闹铃提醒；规则会保留，但不会生效。'
-                        : widget.controller.alarmPermission ==
-                              AlarmPermissionState.denied
-                        ? '闹铃权限未开启；规则会保留，但不会生效。'
-                        : '闹铃提醒需要 iOS 26 或更高版本及独立授权。',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-            ],
-          ],
-        ),
-      ),
+            ),
+          if (reminders.any(
+            (item) => item.deliveryType == ReminderDeliveryType.alarm,
+          ))
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                widget.controller.alarmPermission ==
+                        AlarmPermissionState.unsupported
+                    ? '当前系统不支持闹铃提醒；规则会保留，但不会生效。'
+                    : widget.controller.alarmPermission ==
+                          AlarmPermissionState.denied
+                    ? '闹铃权限未开启；规则会保留，但不会生效。'
+                    : '闹铃提醒需要 iOS 26 或更高版本及独立授权。',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+        ],
+      ],
     );
   }
 
@@ -1128,16 +1187,47 @@ class _TaskEditorState extends State<TaskEditor> {
           .map((tag) => tag.name),
       ...historical,
     ];
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: readOnly ? null : () => scaffoldKey.currentState?.openEndDrawer(),
-      child: InputDecorator(
-        decoration: const InputDecoration(
-          labelText: '标签',
-          suffixIcon: Icon(Icons.chevron_right),
-        ),
-        child: Text(labels.isEmpty ? '' : labels.join('、')),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (labels.isEmpty)
+          Text(
+            '暂无标签',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: labels.map((name) {
+              final definition = widget.controller.tagDefinitionForName(name);
+              return InputChip(
+                avatar: Icon(
+                  definition?.icon ?? Icons.label_outline,
+                  size: 18,
+                  color: definition?.color,
+                ),
+                label: Text(name),
+                onDeleted: readOnly
+                    ? null
+                    : () => setState(() => selectedTags.remove(name)),
+              );
+            }).toList(),
+          ),
+        if (!readOnly) ...[
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => scaffoldKey.currentState?.openEndDrawer(),
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('编辑标签'),
+            ),
+          ),
+        ],
+      ],
     );
   }
 

@@ -414,11 +414,12 @@ class _TaskSearchDrawerState extends State<TaskSearchDrawer> {
           .map((task) => task.progress?.templateName ?? '')
           .where((name) => name.isNotEmpty),
     }.toList()..sort();
-    final progressNodes = <String>{
-      ...widget.controller.tasks
-          .map((task) => task.progress?.currentNode?.name ?? '')
-          .where((name) => name.isNotEmpty),
-    }.toList()..sort();
+    final progressNodes = widget.controller.progressNodeNamesForTemplate(
+      widget.criteria.progressTemplateName,
+      widget.controller.tasks
+          .map((task) => task.progress)
+          .whereType<ProgressSnapshot>(),
+    );
     return Drawer(
       child: SafeArea(
         child: ListView(
@@ -488,24 +489,37 @@ class _TaskSearchDrawerState extends State<TaskSearchDrawer> {
                   (name) => DropdownMenuItem(value: name, child: Text(name)),
                 ),
               ],
-              onChanged: (value) => _update(progressTemplateName: value ?? ''),
-            ),
-            const SizedBox(height: 14),
-            DropdownButtonFormField<String>(
-              key: ValueKey(widget.criteria.progressNodeName),
-              initialValue: widget.criteria.progressNodeName,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.flag_outlined),
-                labelText: '进度节点',
+              onChanged: (value) => _update(
+                progressTemplateName: value ?? '',
+                progressNodeName: '',
               ),
-              items: [
-                const DropdownMenuItem(value: '', child: Text('全部进度节点')),
-                ...progressNodes.map(
-                  (name) => DropdownMenuItem(value: name, child: Text(name)),
-                ),
-              ],
-              onChanged: (value) => _update(progressNodeName: value ?? ''),
             ),
+            if (widget.criteria.progressTemplateName.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String>(
+                key: ValueKey(
+                  'task-node-${widget.criteria.progressTemplateName}-'
+                  '${widget.criteria.progressNodeName}',
+                ),
+                initialValue: widget.criteria.progressNodeName,
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.flag_outlined),
+                  labelText: '进度节点',
+                ),
+                items: [
+                  const DropdownMenuItem(
+                    value: '',
+                    child: Text('该方案全部节点'),
+                  ),
+                  ...progressNodes.map(
+                    (name) => DropdownMenuItem(value: name, child: Text(name)),
+                  ),
+                ],
+                onChanged: (value) => _update(
+                  progressNodeName: value ?? '',
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(
               key: ValueKey(widget.criteria.planId),

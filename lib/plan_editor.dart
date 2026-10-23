@@ -5,6 +5,7 @@ import 'contact_widgets.dart';
 import 'models.dart';
 import 'task_editor.dart';
 import 'task_widgets.dart';
+import 'work_form_widgets.dart';
 
 Future<bool?> showPlanEditor(
   BuildContext context,
@@ -40,6 +41,7 @@ class PlanEditor extends StatefulWidget {
 
 class _PlanEditorState extends State<PlanEditor> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
+  final formKey = GlobalKey<FormState>();
   late final TextEditingController name;
   late final TextEditingController description;
   late String startDate;
@@ -97,6 +99,7 @@ class _PlanEditorState extends State<PlanEditor> {
       tasks.addAll(planTasks.where((task) => task.parentTaskId == root.id));
     }
     tasks.addAll(planTasks.where((task) => !tasks.contains(task)));
+    final taskCompleted = tasks.where(widget.controller.isDone).length;
     return Scaffold(
       key: scaffoldKey,
       appBar: AppBar(
@@ -104,10 +107,24 @@ class _PlanEditorState extends State<PlanEditor> {
         title: Text(plan == null ? '新增计划' : '计划详情'),
         actions: [
           if (plan != null)
-            IconButton(
-              tooltip: '删除计划',
-              onPressed: saving ? null : _delete,
-              icon: const Icon(Icons.delete_outline),
+            PopupMenuButton<String>(
+              tooltip: '更多操作',
+              enabled: !saving,
+              onSelected: (value) {
+                if (value == 'delete') _delete();
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_outline),
+                      SizedBox(width: 10),
+                      Text('删除计划'),
+                    ],
+                  ),
+                ),
+              ],
             ),
           IconButton(
             tooltip: saving ? '保存中…' : '保存计划',
@@ -123,167 +140,244 @@ class _PlanEditorState extends State<PlanEditor> {
       ),
       endDrawer: _buildTagDrawer(context),
       body: SafeArea(
-        child: ListView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: EdgeInsets.fromLTRB(
-            20,
-            16,
-            20,
-            24 + MediaQuery.viewInsetsOf(context).bottom,
-          ),
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: _DateField(
-                    label: '开始日期',
-                    value: startDate,
-                    onTap: () => _pickDate(isStart: true),
-                  ),
+        child: Form(
+          key: formKey,
+          autovalidateMode: AutovalidateMode.onUnfocus,
+          child: CustomScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  12,
+                  16,
+                  28 + MediaQuery.viewInsetsOf(context).bottom,
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _DateField(
-                    label: '目标日期',
-                    value: targetDate,
-                    onTap: () => _pickDate(isStart: false),
-                  ),
+                sliver: SliverList.list(
+                  children: [
+                    WorkFormSection(
+                      title: '基本信息',
+                      icon: Icons.description_outlined,
+                      children: [
+                        TextFormField(
+                          controller: name,
+                          maxLength: 100,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            labelText: '计划名称',
+                            alignLabelWithHint: true,
+                          ),
+                          validator: (value) =>
+                              (value ?? '').trim().isEmpty ? '请输入计划名称' : null,
+                        ),
+                        TextFormField(
+                          controller: description,
+                          maxLength: 200,
+                          minLines: 3,
+                          maxLines: null,
+                          decoration: const InputDecoration(
+                            labelText: '计划内容',
+                            alignLabelWithHint: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    WorkFormSection(
+                      title: '时间与日历',
+                      icon: Icons.calendar_month_outlined,
+                      children: [
+                        ResponsiveFieldPair(
+                          first: WorkValueField(
+                            label: '开始日期',
+                            value: startDate,
+                            icon: Icons.event_outlined,
+                            onTap: () => _pickDate(isStart: true),
+                          ),
+                          second: WorkValueField(
+                            label: '目标日期',
+                            value: targetDate,
+                            icon: Icons.flag_outlined,
+                            onTap: () => _pickDate(isStart: false),
+                          ),
+                        ),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isVertical = constraints.maxWidth < 430;
+                            return SegmentedButton<PlanCalendarDisplayMode>(
+                              direction: isVertical
+                                  ? Axis.vertical
+                                  : Axis.horizontal,
+                              expandedInsets: isVertical
+                                  ? null
+                                  : EdgeInsets.zero,
+                              showSelectedIcon: false,
+                              segments: PlanCalendarDisplayMode.values
+                                  .map(
+                                    (mode) => ButtonSegment(
+                                      value: mode,
+                                      label: Text(mode.label),
+                                    ),
+                                  )
+                                  .toList(),
+                              selected: {calendarDisplayMode},
+                              onSelectionChanged: (value) => setState(
+                                () => calendarDisplayMode = value.first,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    WorkFormSection(
+                      title: '提醒与闹铃',
+                      icon: Icons.notifications_active_outlined,
+                      subtitle: reminders.isEmpty
+                          ? '可设置多个提醒'
+                          : '${reminders.length} 个提醒',
+                      children: [_buildReminderCard(context)],
+                    ),
+                    const SizedBox(height: 16),
+                    WorkFormSection(
+                      title: '联系人',
+                      icon: Icons.people_outline,
+                      subtitle: selectedContacts.isEmpty
+                          ? '未选择'
+                          : '${selectedContacts.length} 人',
+                      children: [_buildContacts(context)],
+                    ),
+                    const SizedBox(height: 16),
+                    WorkFormSection(
+                      title: '分类与进度',
+                      icon: Icons.account_tree_outlined,
+                      children: [
+                        DropdownMenu<String>(
+                          expandedInsets: EdgeInsets.zero,
+                          label: const Text('分类'),
+                          initialSelection: categoryName.isEmpty
+                              ? null
+                              : categoryName,
+                          dropdownMenuEntries: [
+                            ...widget.controller.categoryDefinitions.map(
+                              (item) => DropdownMenuEntry(
+                                value: item.name,
+                                label: item.name,
+                                leadingIcon: Icon(item.icon, color: item.color),
+                              ),
+                            ),
+                            if (categoryName.isNotEmpty &&
+                                !widget.controller.categoryDefinitions.any(
+                                  (item) => item.name == categoryName,
+                                ))
+                              DropdownMenuEntry(
+                                value: categoryName,
+                                label: '$categoryName（历史分类）',
+                              ),
+                          ],
+                          onSelected: (value) =>
+                              setState(() => categoryName = value ?? ''),
+                        ),
+                        DropdownMenu<String>(
+                          expandedInsets: EdgeInsets.zero,
+                          label: const Text('进度方案'),
+                          initialSelection: progress.sourceTemplateId,
+                          dropdownMenuEntries: [
+                            ...widget.controller.progressTemplates.map(
+                              (item) => DropdownMenuEntry(
+                                value: item.id,
+                                label: item.name,
+                              ),
+                            ),
+                            if (progress.sourceTemplateId != null &&
+                                !widget.controller.progressTemplates.any(
+                                  (item) =>
+                                      item.id == progress.sourceTemplateId,
+                                ))
+                              DropdownMenuEntry(
+                                value: progress.sourceTemplateId!,
+                                label: '${progress.templateName}（历史方案）',
+                              ),
+                          ],
+                          onSelected: (value) => setState(() {
+                            final id =
+                                plan?.id ??
+                                'draft-${DateTime.now().microsecondsSinceEpoch}';
+                            progress = widget.controller.progressSnapshot(
+                              'plan-progress-$id',
+                              templateId: value,
+                            );
+                          }),
+                        ),
+                        DropdownMenu<String>(
+                          key: ValueKey(
+                            '${progress.sourceTemplateId}-${progress.currentNodeId}',
+                          ),
+                          expandedInsets: EdgeInsets.zero,
+                          label: const Text('进度节点'),
+                          initialSelection: progress.currentNodeId,
+                          dropdownMenuEntries: progress.nodes
+                              .map(
+                                (item) => DropdownMenuEntry(
+                                  value: item.id,
+                                  label: item.name,
+                                ),
+                              )
+                              .toList(),
+                          onSelected: (value) => setState(
+                            () => progress = progress.copyWith(
+                              currentNodeId: value,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    WorkFormSection(
+                      title: '标签',
+                      icon: Icons.sell_outlined,
+                      subtitle: selectedTags.isEmpty
+                          ? '未选择'
+                          : '${selectedTags.length} 个标签',
+                      children: [_buildTags(context)],
+                    ),
+                    if (plan != null) ...[
+                      const SizedBox(height: 16),
+                      WorkFormSection(
+                        title: '任务',
+                        icon: Icons.checklist_outlined,
+                        subtitle: '$taskCompleted/${tasks.length} 已完成',
+                        trailing: IconButton.filledTonal(
+                          tooltip: '新增任务',
+                          onPressed: () => _addTask(plan),
+                          icon: const Icon(Icons.add),
+                        ),
+                        children: [
+                          if (tasks.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 18),
+                              child: Center(child: Text('该计划还没有任务')),
+                            )
+                          else
+                            ...tasks.map(
+                              (task) => TaskCard(
+                                task: task,
+                                controller: widget.controller,
+                                nested: task.parentTaskId != null,
+                                onTap: () => _editTask(task),
+                                onAddSubtask: task.parentTaskId == null
+                                    ? () => _addSubtask(task)
+                                    : null,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<PlanCalendarDisplayMode>(
-              initialValue: calendarDisplayMode,
-              decoration: const InputDecoration(labelText: '日历显示'),
-              items: PlanCalendarDisplayMode.values
-                  .map(
-                    (mode) =>
-                        DropdownMenuItem(value: mode, child: Text(mode.label)),
-                  )
-                  .toList(),
-              onChanged: (value) => setState(
-                () => calendarDisplayMode =
-                    value ?? PlanCalendarDisplayMode.wholePeriod,
               ),
-            ),
-            const SizedBox(height: 10),
-            _buildReminderCard(context),
-            const SizedBox(height: 10),
-            TextField(
-              controller: name,
-              maxLength: 100,
-              decoration: const InputDecoration(labelText: '计划名称'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: description,
-              maxLength: 200,
-              maxLines: 3,
-              decoration: const InputDecoration(labelText: '计划内容'),
-            ),
-            const SizedBox(height: 10),
-            _buildContacts(context),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              initialValue:
-                  widget.controller.categoryDefinitions.any(
-                    (category) => category.name == categoryName,
-                  )
-                  ? categoryName
-                  : null,
-              decoration: const InputDecoration(labelText: '分类'),
-              items: widget.controller.categoryDefinitions
-                  .map(
-                    (category) => DropdownMenuItem(
-                      value: category.name,
-                      child: Text(category.name),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) => setState(() => categoryName = value ?? ''),
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              initialValue: progress.sourceTemplateId,
-              decoration: const InputDecoration(labelText: '进度方案'),
-              items: widget.controller.progressTemplates
-                  .map(
-                    (template) => DropdownMenuItem(
-                      value: template.id,
-                      child: Text(template.name),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) => setState(() {
-                final id =
-                    plan?.id ??
-                    'draft-${DateTime.now().microsecondsSinceEpoch}';
-                progress = widget.controller.progressSnapshot(
-                  'plan-progress-$id',
-                  templateId: value,
-                );
-              }),
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              key: ValueKey(progress.currentNodeId),
-              initialValue: progress.currentNodeId,
-              decoration: const InputDecoration(labelText: '进度节点'),
-              items: progress.nodes
-                  .map(
-                    (node) => DropdownMenuItem(
-                      value: node.id,
-                      child: Text(node.name),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) => setState(
-                () => progress = progress.copyWith(currentNodeId: value),
-              ),
-            ),
-            const SizedBox(height: 10),
-            _buildTags(context),
-            if (plan != null) ...[
-              const SizedBox(height: 30),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '任务（${tasks.length}）',
-                      style: Theme.of(context).textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  IconButton.filledTonal(
-                    tooltip: '新增任务',
-                    onPressed: () => _addTask(plan),
-                    icon: const Icon(Icons.add),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              if (tasks.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: Text('该计划还没有任务')),
-                )
-              else
-                ...tasks.map(
-                  (task) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: TaskCard(
-                      task: task,
-                      controller: widget.controller,
-                      nested: task.parentTaskId != null,
-                      onTap: () => _editTask(task),
-                      onAddSubtask: task.parentTaskId == null
-                          ? () => _addSubtask(task)
-                          : null,
-                    ),
-                  ),
-                ),
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -309,90 +403,86 @@ class _PlanEditorState extends State<PlanEditor> {
     });
   }
 
-  Widget _buildReminderCard(BuildContext context) => Card(
-    margin: EdgeInsets.zero,
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: reminderEnabled,
-            secondary: const Icon(Icons.notifications_active_outlined),
-            title: const Text('提醒与闹铃'),
-            subtitle: Text(
-              reminders.isEmpty ? '可在计划期间内设置多个提醒' : '${reminders.length} 个提醒',
-            ),
-            onChanged: (value) => setState(() => reminderEnabled = value),
-          ),
-          if (reminderEnabled) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () =>
-                        _addPlanReminder(ReminderDeliveryType.notification),
-                    icon: const Icon(Icons.notifications_none),
-                    label: const Text('通知提醒'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () =>
-                        _addPlanReminder(ReminderDeliveryType.alarm),
-                    icon: const Icon(Icons.alarm_outlined),
-                    label: const Text('闹铃提醒'),
-                  ),
-                ),
-              ],
-            ),
-            if (reminders.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              ...reminders.map(
-                (rule) => ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    rule.deliveryType == ReminderDeliveryType.alarm
-                        ? Icons.alarm_outlined
-                        : Icons.notifications_none,
-                  ),
-                  title: Text('${rule.deliveryLabel} · ${rule.label}'),
-                  subtitle:
-                      rule.absoluteAt != null &&
-                          rule.absoluteAt!.isBefore(DateTime.now())
-                      ? const Text('已过期，不会再提醒')
-                      : null,
-                  trailing: IconButton(
-                    tooltip: '删除提醒',
-                    onPressed: () => setState(() {
-                      reminders.remove(rule);
-                      if (reminders.isEmpty) reminderEnabled = false;
-                    }),
-                    icon: const Icon(Icons.close),
-                  ),
-                ),
-              ),
-            ],
-            if (reminders.any(
-              (item) => item.deliveryType == ReminderDeliveryType.alarm,
-            ))
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  widget.controller.alarmPermission ==
-                          AlarmPermissionState.unsupported
-                      ? '当前系统不支持 AlarmKit；闹铃规则会保留。'
-                      : '闹铃需要 iOS 26 或更高版本及独立授权。',
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
-          ],
-        ],
+  Widget _buildReminderCard(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        value: reminderEnabled,
+        secondary: const Icon(Icons.notifications_active_outlined),
+        title: const Text('提醒与闹铃'),
+        subtitle: Text(
+          reminders.isEmpty ? '可在计划期间内设置多个提醒' : '${reminders.length} 个提醒',
+        ),
+        onChanged: (value) => setState(() => reminderEnabled = value),
       ),
-    ),
+      if (reminderEnabled || reminders.isNotEmpty) ...[
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: reminderEnabled
+                    ? () => _addPlanReminder(ReminderDeliveryType.notification)
+                    : null,
+                icon: const Icon(Icons.notifications_none),
+                label: const Text('通知提醒'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: reminderEnabled
+                    ? () => _addPlanReminder(ReminderDeliveryType.alarm)
+                    : null,
+                icon: const Icon(Icons.alarm_outlined),
+                label: const Text('闹铃提醒'),
+              ),
+            ),
+          ],
+        ),
+        if (reminders.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          ...reminders.map(
+            (rule) => ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                rule.deliveryType == ReminderDeliveryType.alarm
+                    ? Icons.alarm_outlined
+                    : Icons.notifications_none,
+              ),
+              title: Text('${rule.deliveryLabel} · ${rule.label}'),
+              subtitle:
+                  rule.absoluteAt != null &&
+                      rule.absoluteAt!.isBefore(DateTime.now())
+                  ? const Text('已过期，不会再提醒')
+                  : null,
+              trailing: IconButton(
+                tooltip: '删除提醒',
+                onPressed: () => setState(() {
+                  reminders.remove(rule);
+                  if (reminders.isEmpty) reminderEnabled = false;
+                }),
+                icon: const Icon(Icons.close),
+              ),
+            ),
+          ),
+        ],
+        if (reminders.any(
+          (item) => item.deliveryType == ReminderDeliveryType.alarm,
+        ))
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              widget.controller.alarmPermission ==
+                      AlarmPermissionState.unsupported
+                  ? '当前系统不支持 AlarmKit；闹铃规则会保留。'
+                  : '闹铃需要 iOS 26 或更高版本及独立授权。',
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+      ],
+    ],
   );
 
   Future<void> _addPlanReminder(ReminderDeliveryType deliveryType) async {
@@ -469,16 +559,43 @@ class _PlanEditorState extends State<PlanEditor> {
           .map((tag) => tag.name),
       ...historical,
     ];
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () => scaffoldKey.currentState?.openEndDrawer(),
-      child: InputDecorator(
-        decoration: const InputDecoration(
-          labelText: '标签',
-          suffixIcon: Icon(Icons.chevron_right),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (labels.isEmpty)
+          Text(
+            '暂无标签',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: labels.map((name) {
+              final definition = widget.controller.tagDefinitionForName(name);
+              return InputChip(
+                avatar: Icon(
+                  definition?.icon ?? Icons.label_outline,
+                  size: 18,
+                  color: definition?.color,
+                ),
+                label: Text(name),
+                onDeleted: () => setState(() => selectedTags.remove(name)),
+              );
+            }).toList(),
+          ),
+        const SizedBox(height: 4),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => scaffoldKey.currentState?.openEndDrawer(),
+            icon: const Icon(Icons.edit_outlined),
+            label: const Text('编辑标签'),
+          ),
         ),
-        child: Text(labels.isEmpty ? '' : labels.join('、')),
-      ),
+      ],
     );
   }
 
@@ -582,10 +699,7 @@ class _PlanEditorState extends State<PlanEditor> {
   );
 
   Future<void> _save() async {
-    if (name.text.trim().isEmpty) {
-      _message('请输入计划名称。');
-      return;
-    }
+    if (!(formKey.currentState?.validate() ?? false)) return;
     setState(() => saving = true);
     try {
       final old = widget.plan;
@@ -706,29 +820,4 @@ class _PlanEditorState extends State<PlanEditor> {
 
   void _message(String text) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-}
-
-class _DateField extends StatelessWidget {
-  const _DateField({
-    required this.label,
-    required this.value,
-    required this.onTap,
-  });
-
-  final String label;
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(12),
-    child: InputDecorator(
-      decoration: InputDecoration(
-        labelText: label,
-        suffixIcon: const Icon(Icons.calendar_month_outlined),
-      ),
-      child: Text(value),
-    ),
-  );
 }

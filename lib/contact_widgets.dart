@@ -21,103 +21,49 @@ class ContactSelectionField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final divider = BorderSide(
-      color: Theme.of(context).colorScheme.outlineVariant,
-      width: .5,
-    );
-    return InputDecorator(
-      decoration: const InputDecoration(labelText: '联系人'),
-      child: Column(
-        children: [
-          if (selectedContacts.isNotEmpty)
-            Table(
-              border: TableBorder(
-                horizontalInside: divider,
-                verticalInside: divider,
-              ),
-              columnWidths: {
-                0: const FlexColumnWidth(),
-                1: const FlexColumnWidth(),
-                2: const FlexColumnWidth(),
-                if (!readOnly) 3: const FixedColumnWidth(80),
-              },
-              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-              children: [
-                TableRow(
-                  children: [
-                    const _ContactCell(child: Text('姓名')),
-                    const _ContactCell(child: Text('电话')),
-                    const _ContactCell(child: Text('备注')),
-                    if (!readOnly) const SizedBox.shrink(),
-                  ],
+    final colors = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (selectedContacts.isEmpty)
+          Text(
+            '暂无联系人',
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: colors.onSurfaceVariant),
+          )
+        else
+          ...selectedContacts.map(
+            (contact) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                for (final contact in selectedContacts)
-                  TableRow(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 8, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _ContactCell(
-                        child: Text(
-                          contact.name,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      _ContactCell(
-                        child: Text(
-                          contact.phone,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      _ContactCell(
-                        child: Text(
-                          contact.remark,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (!readOnly)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              contact.name,
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          if (!readOnly) ...[
                             IconButton(
                               tooltip: '编辑联系人配置',
-                              constraints: const BoxConstraints.tightFor(
-                                width: 36,
-                                height: 40,
-                              ),
-                              padding: const EdgeInsets.all(8),
                               onPressed: _configuredContact(contact) == null
                                   ? null
-                                  : () async {
-                                      final updated =
-                                          await showContactEditorDialog(
-                                            context,
-                                            controller,
-                                            contact: _configuredContact(
-                                              contact,
-                                            ),
-                                          );
-                                      if (updated == null ||
-                                          !context.mounted ||
-                                          preserveSnapshots) {
-                                        return;
-                                      }
-                                      onChanged(
-                                        selectedContacts
-                                            .map(
-                                              (item) => item.id == updated.id
-                                                  ? updated
-                                                  : item,
-                                            )
-                                            .toList(),
-                                      );
-                                    },
-                              icon: const Icon(Icons.edit_outlined, size: 18),
+                                  : () => _editContact(context, contact),
+                              icon: const Icon(Icons.edit_outlined, size: 19),
                             ),
                             IconButton(
                               tooltip: '取消选择',
-                              constraints: const BoxConstraints.tightFor(
-                                width: 36,
-                                height: 40,
-                              ),
-                              padding: const EdgeInsets.all(8),
                               onPressed: () => onChanged(
                                 selectedContacts
                                     .where((item) => item.id != contact.id)
@@ -125,38 +71,57 @@ class ContactSelectionField extends StatelessWidget {
                               ),
                               icon: const Icon(
                                 Icons.remove_circle_outline,
-                                size: 18,
+                                size: 19,
                               ),
                             ),
                           ],
-                        ),
+                        ],
+                      ),
+                      _ContactValue(label: '电话', value: contact.phone),
+                      const SizedBox(height: 10),
+                      _ContactValue(label: '备注', value: contact.remark),
                     ],
                   ),
-              ],
-            ),
-          if (!readOnly)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () async {
-                  final selected = await showContactPicker(
-                    context,
-                    controller,
-                    selectedContacts,
-                  );
-                  if (selected == null || !context.mounted) return;
-                  if (selectedContacts.any((item) => item.id == selected.id)) {
-                    return;
-                  }
-                  onChanged([...selectedContacts, selected]);
-                },
-                icon: const Icon(Icons.add),
-                label: const Text('选择或新增联系人'),
+                ),
               ),
             ),
-        ],
-      ),
+          ),
+        if (!readOnly)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => _pickContact(context),
+              icon: const Icon(Icons.person_add_alt_1_outlined),
+              label: const Text('选择或新增联系人'),
+            ),
+          ),
+      ],
     );
+  }
+
+  Future<void> _editContact(BuildContext context, ContactEntry contact) async {
+    final updated = await showContactEditorDialog(
+      context,
+      controller,
+      contact: _configuredContact(contact),
+    );
+    if (updated == null || !context.mounted || preserveSnapshots) return;
+    onChanged(
+      selectedContacts
+          .map((item) => item.id == updated.id ? updated : item)
+          .toList(),
+    );
+  }
+
+  Future<void> _pickContact(BuildContext context) async {
+    final selected = await showContactPicker(
+      context,
+      controller,
+      selectedContacts,
+    );
+    if (selected == null || !context.mounted) return;
+    if (selectedContacts.any((item) => item.id == selected.id)) return;
+    onChanged([...selectedContacts, selected]);
   }
 
   ContactEntry? _configuredContact(ContactEntry snapshot) {
@@ -164,6 +129,33 @@ class ContactSelectionField extends StatelessWidget {
       if (contact.id == snapshot.id) return contact;
     }
     return null;
+  }
+}
+
+class _ContactValue extends StatelessWidget {
+  const _ContactValue({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelMedium
+              ?.copyWith(color: colors.onSurfaceVariant),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value.trim().isEmpty ? '未填写' : value,
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.4),
+        ),
+      ],
+    );
   }
 }
 
@@ -350,16 +342,4 @@ Future<ContactEntry?> showContactEditorDialog(
   phone.dispose();
   remark.dispose();
   return result;
-}
-
-class _ContactCell extends StatelessWidget {
-  const _ContactCell({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-    child: child,
-  );
 }

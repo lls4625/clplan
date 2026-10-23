@@ -72,7 +72,18 @@ class SettingsPage extends StatelessWidget {
             icon: Icons.contacts_outlined,
             title: '联系人',
             subtitle: '${controller.contacts.length} 人',
-            onTap: () => _openDetail(context, '联系人', _contactDetail),
+            onTap: () => _openDetail(
+              context,
+              '联系人',
+              _contactDetail,
+              actionsBuilder: (context) => [
+                TextButton(
+                  onPressed: () => showContactEditorDialog(context, controller),
+                  child: const Text('新增'),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
           ),
         ],
       ),
@@ -104,7 +115,7 @@ class SettingsPage extends StatelessWidget {
           ),
           _SettingsMenuItem(
             icon: Icons.info_outline,
-            title: '关于日序',
+            title: '关于 ClPlan',
             subtitle: '应用信息、赞赏与评分',
             onTap: () => _openDetail(context, '关于', _aboutDetail),
           ),
@@ -116,13 +127,15 @@ class SettingsPage extends StatelessWidget {
   Future<void> _openDetail(
     BuildContext context,
     String title,
-    Widget Function(BuildContext) builder,
-  ) => Navigator.of(context).push(
+    Widget Function(BuildContext) builder, {
+    List<Widget> Function(BuildContext)? actionsBuilder,
+  }) => Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (_) => _SettingsDetailPage(
         title: title,
         controller: controller,
         contentBuilder: builder,
+        actionsBuilder: actionsBuilder,
       ),
     ),
   );
@@ -412,42 +425,17 @@ class SettingsPage extends StatelessWidget {
 
   Widget _contactDetail(BuildContext context) => _Panel(
     title: '联系人',
-    trailing: TextButton(
-      onPressed: () => _editContacts(context),
-      child: const Text('管理'),
-    ),
     children: [
       if (controller.contacts.isEmpty)
         const Text('暂无联系人，可在这里或计划、任务表单中新增。')
       else
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-            columnSpacing: 24,
-            columns: const [
-              DataColumn(label: Text('姓名')),
-              DataColumn(label: Text('电话')),
-              DataColumn(label: Text('备注')),
-            ],
-            rows: controller.contacts
-                .map(
-                  (contact) => DataRow(
-                    cells: [
-                      DataCell(Text(contact.name)),
-                      DataCell(Text(contact.phone)),
-                      DataCell(
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 220),
-                          child: Text(
-                            contact.remark,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-                .toList(),
+        ...controller.contacts.map(
+          (contact) => _ContactCard(
+            key: ValueKey(contact.id),
+            contact: contact,
+            onEdit: () =>
+                showContactEditorDialog(context, controller, contact: contact),
+            onDelete: () => _confirmDeleteContact(context, controller, contact),
           ),
         ),
       const Padding(
@@ -460,42 +448,153 @@ class SettingsPage extends StatelessWidget {
     ],
   );
 
-  Widget _tableDetail(BuildContext context) => _Panel(
-    title: '表格与数据',
-    children: [
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          OutlinedButton(
-            onPressed: () => _editColumns(context),
-            child: const Text('表格列显示与顺序'),
+  Widget _tableDetail(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final quadrantCount = controller.tagDefinitions
+        .where((tag) => tag.isQuadrant)
+        .length;
+    final ordinaryTagCount = controller.tagDefinitions.length - quadrantCount;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Card.filled(
+          color: colors.primaryContainer.withValues(alpha: .55),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.table_view_outlined, color: colors.primary),
+                const SizedBox(height: 12),
+                Text(
+                  '${controller.plans.length} 个计划可导出',
+                  style: Theme.of(context).textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '导出的文件同时是可再次导入的计划模板，当前计划的主要字段会写入“计划”工作表。',
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: colors.onSurfaceVariant, height: 1.45),
+                ),
+              ],
+            ),
           ),
-          OutlinedButton(
-            onPressed: () => _showTable(context),
-            child: const Text('查看计划表格'),
-          ),
-          OutlinedButton.icon(
-            onPressed: () => _export(context),
-            icon: const Icon(Icons.ios_share),
-            label: const Text('导出 XLSX'),
-          ),
-          OutlinedButton.icon(
-            onPressed: () => _import(context),
-            icon: const Icon(Icons.file_download_outlined),
-            label: const Text('导入 XLSX'),
-          ),
-        ],
-      ),
-      const Padding(
-        padding: EdgeInsets.only(top: 8),
-        child: Text(
-          '支持固定字段模板，文件不超过 10 MB、记录不超过 5000 行。同 ID 差异逐字段确认，默认保留本地。',
-          style: TextStyle(fontSize: 12),
         ),
-      ),
-    ],
-  );
+        const SizedBox(height: 14),
+        Text('查看与设置', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Card.outlined(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.grid_on_outlined),
+                title: const Text('查看计划表格'),
+                subtitle: const Text('在 App 内快速核对当前计划数据'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _showTable(context),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.view_column_outlined),
+                title: const Text('任务表格列设置'),
+                subtitle: const Text('调整任务表格的显示字段与顺序'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _editColumns(context),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        Text('导入与导出', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final stacked = constraints.maxWidth < 430;
+            final width = stacked
+                ? constraints.maxWidth
+                : (constraints.maxWidth - 10) / 2;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                SizedBox(
+                  width: width,
+                  child: FilledButton.icon(
+                    onPressed: () => _export(context),
+                    icon: const Icon(Icons.ios_share),
+                    label: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 13),
+                      child: Text('导出计划 XLSX'),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: width,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _import(context),
+                    icon: const Icon(Icons.file_download_outlined),
+                    label: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 13),
+                      child: Text('导入计划 XLSX'),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 18),
+        Text('模板内容', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Card.outlined(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _DataCountChip(
+                      icon: Icons.folder_outlined,
+                      label: '${controller.categoryDefinitions.length} 个分类',
+                    ),
+                    _DataCountChip(
+                      icon: Icons.route_outlined,
+                      label: '${controller.progressTemplates.length} 套进度',
+                    ),
+                    _DataCountChip(
+                      icon: Icons.grid_view_outlined,
+                      label: '$quadrantCount 个四象限',
+                    ),
+                    _DataCountChip(
+                      icon: Icons.sell_outlined,
+                      label: '$ordinaryTagCount 个普通标签',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '分类、进度方案、对应进度节点和四象限标签提供下拉选择；四象限可留空。普通标签参考 App 内已有内容，多个值请用英文逗号分隔。',
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: colors.onSurfaceVariant, height: 1.5),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '文件上限 10 MB、最多 5000 行；相同计划 ID 的字段会在导入前逐项确认，默认保留本地内容。',
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: colors.onSurfaceVariant, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _privacyDetail(BuildContext context) => const _Panel(
     title: '本地数据与隐私',
@@ -548,7 +647,13 @@ class SettingsPage extends StatelessWidget {
 
   Future<void> _export(BuildContext context) async {
     try {
-      await XlsxService.exportTasks(controller.tasks);
+      await XlsxService.exportPlans(
+        plans: controller.plans,
+        categories: controller.categoryDefinitions,
+        progressTemplates: controller.progressTemplates,
+        tags: controller.tagDefinitions,
+        contacts: controller.contacts,
+      );
     } catch (exception) {
       if (context.mounted) _message(context, '导出失败：$exception');
     }
@@ -556,7 +661,12 @@ class SettingsPage extends StatelessWidget {
 
   Future<void> _import(BuildContext context) async {
     try {
-      final result = await XlsxService.pickAndParse(controller.statuses);
+      final result = await XlsxService.pickAndParse(
+        categories: controller.categoryDefinitions,
+        progressTemplates: controller.progressTemplates,
+        tags: controller.tagDefinitions,
+        contacts: controller.contacts,
+      );
       if (result == null || !context.mounted) return;
       await showModalBottomSheet<void>(
         context: context,
@@ -595,14 +705,6 @@ class SettingsPage extends StatelessWidget {
         builder: (_) => _TagEditor(controller: controller),
       );
 
-  Future<void> _editContacts(BuildContext context) async =>
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        builder: (_) => _ContactEditor(controller: controller),
-      );
-
   Future<void> _editColumns(BuildContext context) async =>
       showModalBottomSheet<void>(
         context: context,
@@ -612,9 +714,15 @@ class SettingsPage extends StatelessWidget {
       );
 
   void _showTable(BuildContext context) {
-    final columns = controller.columns
-        .where((column) => column.visible)
-        .toList();
+    const columns = <MapEntry<String, String>>[
+      MapEntry('name', '计划名称'),
+      MapEntry('category', '分类'),
+      MapEntry('progressTemplate', '进度方案'),
+      MapEntry('progressNode', '进度节点'),
+      MapEntry('tags', '标签'),
+      MapEntry('startDate', '开始日期'),
+      MapEntry('targetDate', '目标日期'),
+    ];
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -630,7 +738,7 @@ class SettingsPage extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      '任务表格',
+                      '计划表格',
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                   ),
@@ -649,15 +757,15 @@ class SettingsPage extends StatelessWidget {
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
                     columns: columns
-                        .map((column) => DataColumn(label: Text(column.label)))
+                        .map((column) => DataColumn(label: Text(column.value)))
                         .toList(),
-                    rows: controller.tasks
+                    rows: controller.plans
                         .map(
-                          (task) => DataRow(
+                          (plan) => DataRow(
                             cells: columns
                                 .map(
                                   (column) => DataCell(
-                                    Text(_field(task, column.keyName)),
+                                    Text(_planField(plan, column.key)),
                                   ),
                                 )
                                 .toList(),
@@ -674,26 +782,14 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  String _field(TaskItem task, String key) => switch (key) {
-    'id' => task.id,
-    'title' => task.title,
-    'description' => task.description,
-    'type' => task.type,
-    'contact' => task.contact,
-    'status' => task.statusId,
-    'tags' => task.tags.join('，'),
-    'startDate' => task.startDate,
-    'startTime' => task.startTime,
-    'reminderEnabled' => task.reminderEnabled ? 'true' : 'false',
-    'reminders' =>
-      task.reminders
-          .map((item) => '${item.deliveryLabel}·${item.label}')
-          .join('；'),
-    'reason' => task.reason,
-    'completedAt' => task.completedAt?.toIso8601String() ?? '',
-    'originId' => task.originId ?? '',
-    'parentTaskId' => task.parentTaskId ?? '',
-    'updatedAt' => task.updatedAt.toIso8601String(),
+  String _planField(PlanItem plan, String key) => switch (key) {
+    'name' => plan.name,
+    'category' => plan.categoryName,
+    'progressTemplate' => plan.progress.templateName,
+    'progressNode' => plan.progress.currentNode?.name ?? '',
+    'tags' => plan.tags.map((tag) => tag.name).join('，'),
+    'startDate' => plan.startDate,
+    'targetDate' => plan.targetDate,
     _ => '',
   };
 
@@ -819,17 +915,23 @@ class _SettingsDetailPage extends StatelessWidget {
     required this.title,
     required this.controller,
     required this.contentBuilder,
+    this.actionsBuilder,
   });
 
   final String title;
   final AppController controller;
   final Widget Function(BuildContext) contentBuilder;
+  final List<Widget> Function(BuildContext)? actionsBuilder;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
     builder: (context, _) => Scaffold(
-      appBar: AppBar(title: Text(title), centerTitle: true),
+      appBar: AppBar(
+        title: Text(title),
+        centerTitle: true,
+        actions: actionsBuilder?.call(context),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 4, 18, 36),
         children: [contentBuilder(context)],
@@ -1016,6 +1118,148 @@ class _Panel extends StatelessWidget {
   );
 }
 
+class _DataCountChip extends StatelessWidget {
+  const _DataCountChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Chip(
+    avatar: Icon(icon, size: 18),
+    label: Text(label),
+    side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+    backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+  );
+}
+
+class _ContactCard extends StatelessWidget {
+  const _ContactCard({
+    super.key,
+    required this.contact,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final ContactEntry contact;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Card.outlined(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(right: 44),
+              child: Column(
+                children: [
+                  _ContactCardRow(label: '姓名', value: contact.name),
+                  _ContactCardRow(label: '电话', value: contact.phone),
+                  _ContactCardRow(
+                    label: '备注',
+                    value: contact.remark,
+                    softWrap: true,
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: IconButton(
+                tooltip: '编辑联系人',
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined),
+              ),
+            ),
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: IconButton(
+                tooltip: '删除联系人',
+                color: colors.error,
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ContactCardRow extends StatelessWidget {
+  const _ContactCardRow({
+    required this.label,
+    required this.value,
+    this.softWrap,
+  });
+
+  final String label;
+  final String value;
+  final bool? softWrap;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 48,
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            softWrap: softWrap,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.4),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> _confirmDeleteContact(
+  BuildContext context,
+  AppController controller,
+  ContactEntry contact,
+) async {
+  final confirmed =
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('删除“${contact.name}”联系人？'),
+          content: const Text('该联系人将不再出现在后续选择列表中；已保存计划和任务中的姓名、电话、备注保持不变。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('删除'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+  if (!confirmed) return;
+  await controller.deleteContact(contact.id);
+}
+
 class _SelectRow extends StatelessWidget {
   const _SelectRow({
     required this.label,
@@ -1050,119 +1294,6 @@ class _SelectRow extends StatelessWidget {
   );
 }
 
-class _ContactEditor extends StatelessWidget {
-  const _ContactEditor({required this.controller});
-
-  final AppController controller;
-
-  @override
-  Widget build(BuildContext context) => DraggableScrollableSheet(
-    expand: false,
-    initialChildSize: .82,
-    builder: (context, scroll) => AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) => ListView(
-        controller: scroll,
-        padding: const EdgeInsets.all(18),
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '联系人',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-              ),
-              Text('${controller.contacts.length} 个'),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-          const Text(
-            '在此统一新增、编辑和删除联系人。历史计划和任务保存独立快照，不随配置变化。',
-            style: TextStyle(fontSize: 12),
-          ),
-          const SizedBox(height: 10),
-          if (controller.contacts.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: Text('还没有联系人')),
-            ),
-          ...controller.contacts.map(
-            (contact) => Card(
-              key: ValueKey(contact.id),
-              child: ListTile(
-                leading: const Icon(Icons.person_outline),
-                title: Text(contact.name),
-                subtitle: Text(
-                  [
-                    contact.phone,
-                    contact.remark,
-                  ].where((value) => value.isNotEmpty).join(' · '),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      tooltip: '编辑联系人',
-                      onPressed: () => showContactEditorDialog(
-                        context,
-                        controller,
-                        contact: contact,
-                      ),
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                    IconButton(
-                      tooltip: '删除联系人',
-                      onPressed: () => _delete(context, contact),
-                      icon: const Icon(Icons.delete_outline),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: () => showContactEditorDialog(context, controller),
-            icon: const Icon(Icons.person_add_alt_1_outlined),
-            label: const Text('新增联系人'),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  Future<void> _delete(BuildContext context, ContactEntry contact) async {
-    final confirmed =
-        await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text('删除“${contact.name}”联系人？'),
-            content: const Text('该联系人将不再出现在后续选择列表中；已保存计划和任务中的姓名、电话、备注保持不变。'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('删除'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-    if (!confirmed) return;
-    await controller.deleteContact(contact.id);
-  }
-}
-
 Widget _preserveReorderAppearance(
   Widget child,
   int index,
@@ -1189,10 +1320,7 @@ class _PlatformAwareReorderHandle extends StatelessWidget {
       TargetPlatform.android ||
       TargetPlatform.fuchsia => Semantics(
         label: '长按拖动排序',
-        child: ReorderableDelayedDragStartListener(
-          index: index,
-          child: handle,
-        ),
+        child: ReorderableDelayedDragStartListener(index: index, child: handle),
       ),
       _ => Tooltip(
         message: '拖动排序',
@@ -1297,9 +1425,7 @@ class _CategoryEditor extends StatelessWidget {
             key: ValueKey(category.id),
             child: Row(
               children: [
-                _PlatformAwareReorderHandle(
-                  index: index,
-                ),
+                _PlatformAwareReorderHandle(index: index),
                 Expanded(
                   child: ListTile(
                     contentPadding: const EdgeInsets.only(right: 4),
@@ -2112,10 +2238,7 @@ class _TagEditorState extends State<_TagEditor> {
           itemCount: reorderableTags.length,
           onReorderItem: (oldIndex, newIndex) async {
             try {
-              await widget.controller.reorderTagDefinitions(
-                oldIndex,
-                newIndex,
-              );
+              await widget.controller.reorderTagDefinitions(oldIndex, newIndex);
             } catch (exception) {
               if (context.mounted) _message(context, exception);
             }
@@ -2127,9 +2250,7 @@ class _TagEditorState extends State<_TagEditor> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _PlatformAwareReorderHandle(
-                    index: index,
-                  ),
+                  _PlatformAwareReorderHandle(index: index),
                   Expanded(
                     child: _editingTagIds.contains(tag.id)
                         ? _buildEditor(context, tag)
@@ -2464,30 +2585,29 @@ class _ImportPreviewState extends State<_ImportPreview> {
   final selectedFields = <String, Set<String>>{};
   bool importing = false;
   static const fields = [
-    'title',
+    'name',
     'description',
-    'type',
-    'contact',
-    'status',
+    'category',
+    'progressTemplate',
+    'progressNode',
+    'quadrant',
     'tags',
     'startDate',
-    'startTime',
+    'targetDate',
+    'contacts',
+    'calendarDisplayMode',
     'reminderEnabled',
     'reminders',
-    'reason',
-    'completedAt',
-    'originId',
-    'parentTaskId',
   ];
 
   @override
   Widget build(BuildContext context) {
-    final incoming = widget.result.tasks;
+    final incoming = widget.result.plans;
     final conflicts = incoming
-        .where((task) => widget.controller.taskById(task.id) != null)
+        .where((plan) => widget.controller.planById(plan.id) != null)
         .toList();
     final additions = incoming
-        .where((task) => widget.controller.taskById(task.id) == null)
+        .where((plan) => widget.controller.planById(plan.id) == null)
         .toList();
     return DraggableScrollableSheet(
       expand: false,
@@ -2529,18 +2649,18 @@ class _ImportPreviewState extends State<_ImportPreview> {
                   ),
                 if (additions.isNotEmpty)
                   ExpansionTile(
-                    title: Text('新增任务（${additions.length}）'),
+                    title: Text('新增计划（${additions.length}）'),
                     children: additions
                         .map(
-                          (task) => ListTile(
-                            title: Text(task.title),
-                            subtitle: Text(task.id),
+                          (plan) => ListTile(
+                            title: Text(plan.name),
+                            subtitle: Text(plan.id),
                           ),
                         )
                         .toList(),
                   ),
                 ...conflicts.map((remote) {
-                  final local = widget.controller.taskById(remote.id)!;
+                  final local = widget.controller.planById(remote.id)!;
                   final changed = fields
                       .where(
                         (field) =>
@@ -2552,7 +2672,7 @@ class _ImportPreviewState extends State<_ImportPreview> {
                     () => <String>{},
                   );
                   return ExpansionTile(
-                    title: Text(remote.title),
+                    title: Text(remote.name),
                     subtitle: Text('${changed.length} 个字段不同；默认保留本地'),
                     children: changed
                         .map(
@@ -2593,19 +2713,16 @@ class _ImportPreviewState extends State<_ImportPreview> {
   Future<void> _confirm() async {
     setState(() => importing = true);
     try {
-      final merged = <TaskItem>[];
-      for (final remote in widget.result.tasks) {
-        final local = widget.controller.taskById(remote.id);
+      final merged = <PlanItem>[];
+      for (final remote in widget.result.plans) {
+        final local = widget.controller.planById(remote.id);
         merged.add(
           local == null
               ? remote
               : _merge(local, remote, selectedFields[remote.id] ?? const {}),
         );
       }
-      await widget.controller.importTasks(
-        merged,
-        merged.map((task) => task.id).toSet(),
-      );
+      await widget.controller.importPlans(merged);
       if (mounted) Navigator.pop(context);
     } catch (exception) {
       if (mounted)
@@ -2616,72 +2733,93 @@ class _ImportPreviewState extends State<_ImportPreview> {
     }
   }
 
-  TaskItem _merge(
-    TaskItem local,
-    TaskItem remote,
-    Set<String> selected,
-  ) => TaskItem(
-    id: local.id,
-    title: selected.contains('title') ? remote.title : local.title,
-    description: selected.contains('description')
-        ? remote.description
-        : local.description,
-    type: selected.contains('type') ? remote.type : local.type,
-    contact: selected.contains('contact') ? remote.contact : local.contact,
-    statusId: selected.contains('status') ? remote.statusId : local.statusId,
-    tags: selected.contains('tags') ? remote.tags : local.tags,
-    startDate: selected.contains('startDate')
-        ? remote.startDate
-        : local.startDate,
-    startTime: selected.contains('startTime')
-        ? remote.startTime
-        : local.startTime,
-    reason: selected.contains('reason') ? remote.reason : local.reason,
-    completedAt: selected.contains('completedAt')
-        ? remote.completedAt
-        : local.completedAt,
-    originId: selected.contains('originId') ? remote.originId : local.originId,
-    parentTaskId: selected.contains('parentTaskId')
-        ? remote.parentTaskId
-        : local.parentTaskId,
-    updatedAt: DateTime.now(),
-    sourceCategoryId: selected.contains('type') ? null : local.sourceCategoryId,
-    categoryColorValue: local.categoryColorValue,
-    categoryIconName: local.categoryIconName,
-    tagSnapshots: selected.contains('tags') ? const [] : local.tagSnapshots,
-    progress: local.progress,
-    planId: local.planId,
-    recurrenceRuleId: local.recurrenceRuleId,
-    occurrenceDate: local.occurrenceDate,
-    detachedFromRule: local.detachedFromRule || local.recurrenceRuleId != null,
-    reminderEnabled: selected.contains('reminderEnabled')
-        ? remote.reminderEnabled
-        : local.reminderEnabled,
-    reminders: selected.contains('reminders')
-        ? remote.reminders
-        : local.reminders,
-    followups: local.followups,
-    history: local.history,
-  );
+  PlanItem _merge(PlanItem local, PlanItem remote, Set<String> selected) {
+    final useRemoteProgress =
+        selected.contains('progressTemplate') ||
+        selected.contains('progressNode');
+    return PlanItem(
+      id: local.id,
+      name: selected.contains('name') ? remote.name : local.name,
+      description: selected.contains('description')
+          ? remote.description
+          : local.description,
+      categoryName: selected.contains('category')
+          ? remote.categoryName
+          : local.categoryName,
+      categoryColorValue: selected.contains('category')
+          ? remote.categoryColorValue
+          : local.categoryColorValue,
+      categoryIconName: selected.contains('category')
+          ? remote.categoryIconName
+          : local.categoryIconName,
+      tags: _mergedTags(local, remote, selected),
+      progress: useRemoteProgress ? remote.progress : local.progress,
+      startDate: selected.contains('startDate')
+          ? remote.startDate
+          : local.startDate,
+      targetDate: selected.contains('targetDate')
+          ? remote.targetDate
+          : local.targetDate,
+      contacts: selected.contains('contacts')
+          ? remote.contacts
+          : local.contacts,
+      calendarDisplayMode: selected.contains('calendarDisplayMode')
+          ? remote.calendarDisplayMode
+          : local.calendarDisplayMode,
+      updatedAt: DateTime.now(),
+      milestones: local.milestones,
+      rules: local.rules,
+      reminderEnabled: selected.contains('reminderEnabled')
+          ? remote.reminderEnabled
+          : local.reminderEnabled,
+      reminders: selected.contains('reminders')
+          ? remote.reminders
+          : local.reminders,
+    );
+  }
 
-  String _value(TaskItem task, String field) => switch (field) {
-    'title' => task.title,
-    'description' => task.description,
-    'type' => task.type,
-    'contact' => task.contact,
-    'status' => task.statusId,
-    'tags' => task.tags.join('，'),
-    'startDate' => task.startDate,
-    'startTime' => task.startTime,
-    'reminderEnabled' => task.reminderEnabled ? 'true' : 'false',
+  List<TaskTagSnapshot> _mergedTags(
+    PlanItem local,
+    PlanItem remote,
+    Set<String> selected,
+  ) {
+    final localQuadrant = local.tags.where(_isQuadrant).toList();
+    final remoteQuadrant = remote.tags.where(_isQuadrant).toList();
+    final localOrdinary = local.tags.where((tag) => !_isQuadrant(tag)).toList();
+    final remoteOrdinary = remote.tags
+        .where((tag) => !_isQuadrant(tag))
+        .toList();
+    return [
+      ...(selected.contains('quadrant') ? remoteQuadrant : localQuadrant),
+      ...(selected.contains('tags') ? remoteOrdinary : localOrdinary),
+    ];
+  }
+
+  bool _isQuadrant(TaskTagSnapshot tag) =>
+      quadrantTagNames.contains(tag.name) ||
+      (tag.sourceTagId != null && quadrantTagIds.contains(tag.sourceTagId));
+
+  String _value(PlanItem plan, String field) => switch (field) {
+    'name' => plan.name,
+    'description' => plan.description,
+    'category' => plan.categoryName,
+    'progressTemplate' => plan.progress.templateName,
+    'progressNode' => plan.progress.currentNode?.name ?? '',
+    'quadrant' => plan.tags.where(_isQuadrant).map((tag) => tag.name).join(),
+    'tags' =>
+      plan.tags
+          .where((tag) => !_isQuadrant(tag))
+          .map((tag) => tag.name)
+          .join(','),
+    'startDate' => plan.startDate,
+    'targetDate' => plan.targetDate,
+    'contacts' => plan.contacts.map((contact) => contact.name).join(','),
+    'calendarDisplayMode' => plan.calendarDisplayMode.label,
+    'reminderEnabled' => plan.reminderEnabled ? '是' : '否',
     'reminders' =>
-      task.reminders
+      plan.reminders
           .map((item) => '${item.deliveryLabel}·${item.label}')
           .join('；'),
-    'reason' => task.reason,
-    'completedAt' => task.completedAt?.toIso8601String() ?? '',
-    'originId' => task.originId ?? '',
-    'parentTaskId' => task.parentTaskId ?? '',
     _ => '',
   };
 

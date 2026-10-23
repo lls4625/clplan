@@ -1205,14 +1205,15 @@ class StatsFilterDrawer extends StatelessWidget {
           .map((task) => task.progress?.templateName ?? '')
           .where((name) => name.isNotEmpty),
     ]);
-    final nodes = <String>{
-      ...controller.plans
-          .map((plan) => plan.progress.currentNode?.name ?? '')
-          .where((name) => name.isNotEmpty),
-      ...controller.tasks
-          .map((task) => task.progress?.currentNode?.name ?? '')
-          .where((name) => name.isNotEmpty),
-    }.toList()..sort();
+    final nodes = controller.progressNodeNamesForTemplate(
+      criteria.progressTemplateName,
+      [
+        ...controller.plans.map((plan) => plan.progress),
+        ...controller.tasks
+            .map((task) => task.progress)
+            .whereType<ProgressSnapshot>(),
+      ],
+    );
     final tags = controller.orderedTagNames([
       ...controller.plans.expand(
         (plan) => plan.tags.map((tag) => tag.name),
@@ -1351,28 +1352,38 @@ class StatsFilterDrawer extends StatelessWidget {
                       ),
                     ],
                     onChanged: (value) => onChanged(
-                      criteria.copyWith(progressTemplateName: value ?? ''),
+                      criteria.copyWith(
+                        progressTemplateName: value ?? '',
+                        progressNodeName: '',
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    key: ValueKey('stat-node-${criteria.progressNodeName}'),
-                    initialValue: criteria.progressNodeName,
-                    decoration: const InputDecoration(labelText: '进度节点'),
-                    items: [
-                      const DropdownMenuItem(
-                        value: '',
-                        child: Text('全部进度节点'),
+                  if (criteria.progressTemplateName.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      key: ValueKey(
+                        'stat-node-${criteria.progressTemplateName}-'
+                        '${criteria.progressNodeName}',
                       ),
-                      ...nodes.map(
-                        (name) =>
-                            DropdownMenuItem(value: name, child: Text(name)),
+                      initialValue: criteria.progressNodeName,
+                      decoration: const InputDecoration(
+                        labelText: '进度节点',
                       ),
-                    ],
-                    onChanged: (value) => onChanged(
-                      criteria.copyWith(progressNodeName: value ?? ''),
+                      items: [
+                        const DropdownMenuItem(
+                          value: '',
+                          child: Text('该方案全部节点'),
+                        ),
+                        ...nodes.map(
+                          (name) =>
+                              DropdownMenuItem(value: name, child: Text(name)),
+                        ),
+                      ],
+                      onChanged: (value) => onChanged(
+                        criteria.copyWith(progressNodeName: value ?? ''),
+                      ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     key: ValueKey('stat-plan-${criteria.planId}'),

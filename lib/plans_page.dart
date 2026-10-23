@@ -354,14 +354,15 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
           .map((plan) => plan.progress.templateName)
           .where((name) => name.isNotEmpty),
     ]);
-    final nodes = <String>{
-      ...widget.controller.progressTemplates.expand(
-        (template) => template.nodes.map((node) => node.name),
-      ),
-      ...widget.controller.plans.expand(
-        (plan) => plan.progress.nodes.map((node) => node.name),
-      ),
-    }.toList()..sort();
+    final nodes = widget.controller.progressNodeNamesForTemplate(
+      widget.criteria.progressTemplateName,
+      [
+        ...widget.controller.plans.map((plan) => plan.progress),
+        ...widget.controller.tasks
+            .map((task) => task.progress)
+            .whereType<ProgressSnapshot>(),
+      ],
+    );
     final tags = widget.controller.orderedTagNames([
       ...widget.controller.plans.expand(
         (plan) => plan.tags.map((tag) => tag.name),
@@ -498,27 +499,38 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                     onChanged: (value) => widget.onChanged(
                       widget.criteria.copyWith(
                         progressTemplateName: value ?? '',
+                        progressNodeName: '',
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    key: ValueKey(
-                      'plan-node-${widget.criteria.progressNodeName}',
-                    ),
-                    initialValue: widget.criteria.progressNodeName,
-                    decoration: const InputDecoration(labelText: '进度节点'),
-                    items: [
-                      const DropdownMenuItem(value: '', child: Text('全部进度节点')),
-                      ...nodes.map(
-                        (name) =>
-                            DropdownMenuItem(value: name, child: Text(name)),
+                  if (widget.criteria.progressTemplateName.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      key: ValueKey(
+                        'plan-node-${widget.criteria.progressTemplateName}-'
+                        '${widget.criteria.progressNodeName}',
                       ),
-                    ],
-                    onChanged: (value) => widget.onChanged(
-                      widget.criteria.copyWith(progressNodeName: value ?? ''),
+                      initialValue: widget.criteria.progressNodeName,
+                      decoration: const InputDecoration(
+                        labelText: '进度节点',
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: '',
+                          child: Text('该方案全部节点'),
+                        ),
+                        ...nodes.map(
+                          (name) =>
+                              DropdownMenuItem(value: name, child: Text(name)),
+                        ),
+                      ],
+                      onChanged: (value) => widget.onChanged(
+                        widget.criteria.copyWith(
+                          progressNodeName: value ?? '',
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: 12),
                   TextField(
                     controller: _planController,

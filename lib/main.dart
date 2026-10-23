@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'app_controller.dart';
 import 'app_database.dart';
 import 'home_shell.dart';
+import 'welcome_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -83,7 +84,7 @@ class ClPlanApp extends StatelessWidget {
       };
       return MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: '日序',
+        title: 'ClPlan',
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,
@@ -104,7 +105,7 @@ class ClPlanApp extends StatelessWidget {
                   ),
                 ),
               )
-            : HomeShell(controller: controller),
+            : WelcomePage(child: HomeShell(controller: controller)),
       );
     },
   );

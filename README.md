@@ -1,4 +1,4 @@
-# 日序（clplan）
+# ClPlan
 
 基于 Flutter 的本地计划与任务管理应用，当前以 iOS 为主要目标平台。
 
@@ -14,7 +14,7 @@
 ## iOS 标识
 
 - Bundle ID：`vip.ichiki.javalee.clplan`
-- 显示名称：`日序`
+- 显示名称：`ClPlan`
 
 ## 数据说明
 
