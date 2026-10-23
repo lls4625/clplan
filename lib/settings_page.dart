@@ -24,12 +24,6 @@ class SettingsPage extends StatelessWidget {
             onTap: () => _openDetail(context, '外观与阅读', _appearanceDetail),
           ),
           _SettingsMenuItem(
-            icon: Icons.calendar_view_month_outlined,
-            title: '日历显示',
-            subtitle: '日历密度与行高',
-            onTap: () => _openDetail(context, '日历', _calendarDetail),
-          ),
-          _SettingsMenuItem(
             icon: Icons.notifications_active_outlined,
             title: '通知与闹铃',
             subtitle:
@@ -175,9 +169,6 @@ class SettingsPage extends StatelessWidget {
       ),
     ],
   );
-
-  Widget _calendarDetail(BuildContext context) =>
-      _CalendarDensityEditor(controller: controller);
 
   Widget _reminderDetail(BuildContext context) {
     final authorized =
@@ -584,7 +575,7 @@ class SettingsPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '文件上限 10 MB、最多 5000 行；相同计划 ID 的字段会在导入前逐项确认，默认保留本地内容。',
+                  '文件上限 10 MB、最多 5000 行；计划 ID 在模板中隐藏并锁定。再次导入时，有 ID 的计划按主键匹配更新，无 ID 的行新增；不会删除本地其他计划。',
                   style: Theme.of(context).textTheme.bodySmall
                       ?.copyWith(color: colors.onSurfaceVariant, height: 1.5),
                 ),
@@ -938,152 +929,6 @@ class _SettingsDetailPage extends StatelessWidget {
       ),
     ),
   );
-}
-
-class _CalendarDensityEditor extends StatefulWidget {
-  const _CalendarDensityEditor({required this.controller});
-
-  final AppController controller;
-
-  @override
-  State<_CalendarDensityEditor> createState() => _CalendarDensityEditorState();
-}
-
-class _CalendarDensityEditorState extends State<_CalendarDensityEditor> {
-  late final TextEditingController smallController;
-  late final TextEditingController mediumController;
-  late final TextEditingController largeController;
-  bool isEditing = false;
-  bool showErrors = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final preferences = widget.controller.preferences;
-    smallController = TextEditingController(
-      text: _numberText(preferences.calendarSmallHeight),
-    );
-    mediumController = TextEditingController(
-      text: _numberText(preferences.calendarMediumHeight),
-    );
-    largeController = TextEditingController(
-      text: _numberText(preferences.calendarLargeHeight),
-    );
-  }
-
-  @override
-  void dispose() {
-    smallController.dispose();
-    mediumController.dispose();
-    largeController.dispose();
-    super.dispose();
-  }
-
-  static String _numberText(double value) =>
-      value == value.roundToDouble() ? '${value.toInt()}' : '$value';
-
-  String? _error(TextEditingController controller) {
-    final value = double.tryParse(controller.text.trim());
-    if (value == null) return '请输入数字';
-    if (value < AppPreferences.minimumCalendarRowHeight ||
-        value > AppPreferences.maximumCalendarRowHeight) {
-      return '请输入 62–360';
-    }
-    return null;
-  }
-
-  String _hint(TextEditingController controller) {
-    final value = double.tryParse(controller.text.trim());
-    if (value == null ||
-        value < AppPreferences.minimumCalendarRowHeight ||
-        value > AppPreferences.maximumCalendarRowHeight) {
-      return '输入有效高度后显示预计条数';
-    }
-    final count = AppPreferences.estimatedCalendarItemCount(value);
-    return '大约显示 $count 条计划';
-  }
-
-  @override
-  Widget build(BuildContext context) => _Panel(
-    title: '日历间距',
-    trailing: TextButton(
-      onPressed: isEditing ? _save : _startEditing,
-      child: Text(isEditing ? '保存' : '编辑'),
-    ),
-    children: [
-      const Text(
-        '分别设置小、中、大三个档位的日期格高度。档位数值不要求按大小排序。允许范围为 62–360 逻辑像素。',
-        style: TextStyle(fontSize: 12),
-      ),
-      const SizedBox(height: 12),
-      _heightField('小', smallController),
-      _heightField('中', mediumController),
-      _heightField('大', largeController),
-    ],
-  );
-
-  Widget _heightField(String label, TextEditingController controller) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 34,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 18),
-                child: Text(label),
-              ),
-            ),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                readOnly: !isEditing,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  labelText: '日期格高度',
-                  helperText: _hint(controller),
-                  errorText: showErrors ? _error(controller) : null,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-
-  Future<void> _save() async {
-    final controllers = [smallController, mediumController, largeController];
-    if (controllers.any((controller) => _error(controller) != null)) {
-      setState(() => showErrors = true);
-      return;
-    }
-    await widget.controller.saveCalendarDensityHeights(
-      small: double.parse(smallController.text.trim()),
-      medium: double.parse(mediumController.text.trim()),
-      large: double.parse(largeController.text.trim()),
-    );
-    if (!mounted) return;
-    setState(() {
-      isEditing = false;
-      showErrors = false;
-    });
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('日历间距已保存')));
-  }
-
-  void _startEditing() {
-    final preferences = widget.controller.preferences;
-    smallController.text = _numberText(preferences.calendarSmallHeight);
-    mediumController.text = _numberText(preferences.calendarMediumHeight);
-    largeController.text = _numberText(preferences.calendarLargeHeight);
-    setState(() {
-      isEditing = true;
-      showErrors = false;
-    });
-  }
 }
 
 class _Panel extends StatelessWidget {
@@ -2559,7 +2404,6 @@ class _ColumnEditorState extends State<_ColumnEditor> {
                 key: ValueKey(column.keyName),
                 secondary: const Icon(Icons.drag_handle),
                 title: Text(column.label),
-                subtitle: Text(column.keyName),
                 value: column.visible,
                 onChanged: (value) => setState(
                   () => columns[index] = column.copyWith(visible: value),
@@ -2654,7 +2498,6 @@ class _ImportPreviewState extends State<_ImportPreview> {
                         .map(
                           (plan) => ListTile(
                             title: Text(plan.name),
-                            subtitle: Text(plan.id),
                           ),
                         )
                         .toList(),

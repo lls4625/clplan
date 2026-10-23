@@ -17,7 +17,6 @@ class TaskSearchCriteria {
     this.categoryName = '',
     this.progressTemplateName = '',
     this.progressNodeName = '',
-    this.planId = '',
     this.tags = const <String>{},
   });
 
@@ -27,7 +26,6 @@ class TaskSearchCriteria {
   final String categoryName;
   final String progressTemplateName;
   final String progressNodeName;
-  final String planId;
   final Set<String> tags;
 
   bool get isActive =>
@@ -37,7 +35,6 @@ class TaskSearchCriteria {
       categoryName.isNotEmpty ||
       progressTemplateName.isNotEmpty ||
       progressNodeName.isNotEmpty ||
-      planId.isNotEmpty ||
       tags.isNotEmpty;
 }
 
@@ -110,9 +107,6 @@ class _TasksPageState extends State<TasksPage>
       if (widget.searchCriteria.progressNodeName.isNotEmpty &&
           task.progress?.currentNode?.name !=
               widget.searchCriteria.progressNodeName)
-        return false;
-      if (widget.searchCriteria.planId.isNotEmpty &&
-          task.planId != widget.searchCriteria.planId)
         return false;
       if (widget.searchCriteria.tags.isNotEmpty &&
           !widget.searchCriteria.tags.any(task.tags.contains))
@@ -378,7 +372,6 @@ class _TaskSearchDrawerState extends State<TaskSearchDrawer> {
     String? categoryName,
     String? progressTemplateName,
     String? progressNodeName,
-    String? planId,
     Set<String>? tags,
   }) {
     widget.onChanged(
@@ -390,7 +383,6 @@ class _TaskSearchDrawerState extends State<TaskSearchDrawer> {
         progressTemplateName:
             progressTemplateName ?? widget.criteria.progressTemplateName,
         progressNodeName: progressNodeName ?? widget.criteria.progressNodeName,
-        planId: planId ?? widget.criteria.planId,
         tags: tags ?? widget.criteria.tags,
       ),
     );
@@ -520,35 +512,6 @@ class _TaskSearchDrawerState extends State<TaskSearchDrawer> {
                 ),
               ),
             ],
-            const SizedBox(height: 14),
-            DropdownButtonFormField<String>(
-              key: ValueKey(widget.criteria.planId),
-              initialValue: widget.criteria.planId,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.route_outlined),
-                labelText: '所属计划',
-              ),
-              items: [
-                const DropdownMenuItem(value: '', child: Text('全部计划')),
-                ...widget.controller.plans.map(
-                  (plan) =>
-                      DropdownMenuItem(value: plan.id, child: Text(plan.name)),
-                ),
-                ...widget.controller.tasks
-                    .map((task) => task.planId)
-                    .whereType<String>()
-                    .toSet()
-                    .where(
-                      (id) =>
-                          !widget.controller.plans.any((plan) => plan.id == id),
-                    )
-                    .map(
-                      (id) =>
-                          DropdownMenuItem(value: id, child: Text('$id（历史计划）')),
-                    ),
-              ],
-              onChanged: (value) => _update(planId: value ?? ''),
-            ),
             const SizedBox(height: 22),
             Text('标签', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),

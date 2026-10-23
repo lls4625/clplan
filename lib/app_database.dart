@@ -14,7 +14,7 @@ class AppDatabase {
     final root = await getDatabasesPath();
     return openDatabase(
       p.join(root, 'clplan.sqlite3'),
-      version: 11,
+      version: 12,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = OFF');
         await db.setJournalMode('WAL');
@@ -210,6 +210,14 @@ class AppDatabase {
         }
         if (oldVersion < 10) {
           await _createContactTables(db);
+        }
+        if (oldVersion < 12) {
+          await db.update(
+            'table_columns',
+            {'visible': 0},
+            where: 'key_name IN (?, ?)',
+            whereArgs: ['id', 'status'],
+          );
         }
       },
     );
@@ -781,7 +789,7 @@ class AppDatabase {
       await db.insert('table_columns', {
         'key_name': entry.key,
         'label': entry.value,
-        'visible': 1,
+        'visible': entry.key == 'id' || entry.key == 'status' ? 0 : 1,
         'sort_order': order++,
       });
     }

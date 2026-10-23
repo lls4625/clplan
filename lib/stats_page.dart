@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'app_controller.dart';
 import 'models.dart';
 import 'plan_editor.dart';
-import 'plan_widgets.dart';
 import 'stable_filter_chip.dart';
 import 'task_editor.dart';
 import 'task_widgets.dart';
@@ -24,7 +23,6 @@ class StatCriteria {
     this.progressTemplateName = '',
     this.progressNodeName = '',
     this.tags = const <String>{},
-    this.planId = '',
     this.scope = StatScope.plans,
   });
 
@@ -46,7 +44,6 @@ class StatCriteria {
   final String progressTemplateName;
   final String progressNodeName;
   final Set<String> tags;
-  final String planId;
   final StatScope scope;
 
   StatCriteria copyWith({
@@ -58,7 +55,6 @@ class StatCriteria {
     String? progressTemplateName,
     String? progressNodeName,
     Set<String>? tags,
-    String? planId,
     StatScope? scope,
   }) => StatCriteria(
     mode: mode ?? this.mode,
@@ -69,7 +65,6 @@ class StatCriteria {
     progressTemplateName: progressTemplateName ?? this.progressTemplateName,
     progressNodeName: progressNodeName ?? this.progressNodeName,
     tags: tags ?? this.tags,
-    planId: planId ?? this.planId,
     scope: scope ?? this.scope,
   );
 }
@@ -215,9 +210,7 @@ class _StatsPageState extends State<StatsPage>
               (widget.criteria.tags.isEmpty ||
                   widget.criteria.tags.any(
                     (name) => _taskMatchesSelectedTag(task, name),
-                  )) &&
-              (widget.criteria.planId.isEmpty ||
-                  task.planId == widget.criteria.planId),
+                  )),
         )
         .toList();
     final complete = cohort.where(widget.controller.isDone).toList();
@@ -240,16 +233,8 @@ class _StatsPageState extends State<StatsPage>
               (widget.criteria.tags.isEmpty ||
                   widget.criteria.tags.any(
                     (name) => _planMatchesSelectedTag(plan, name),
-                  )) &&
-              (widget.criteria.planId.isEmpty ||
-                  plan.id == widget.criteria.planId),
+                  )),
         )
-        .toList();
-    final completedPlans = planCohort
-        .where((plan) => plan.progress.completed)
-        .toList();
-    final unfinishedPlans = planCohort
-        .where((plan) => !plan.progress.completed)
         .toList();
     final reasonCounts = <String, int>{};
     for (final task in unfinished) {
@@ -322,66 +307,11 @@ class _StatsPageState extends State<StatsPage>
                 padding: const EdgeInsets.fromLTRB(18, 14, 18, 110),
                 children: [
                   if (pageView == StatView.plans) ...[
-                    GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: 4,
-                      childAspectRatio: .9,
-                      children: [
-                        _Metric(
-                          label: '计划',
-                          value: '${planCohort.length}',
-                          onTap: () => _showPlans(planCohort, '本周期计划'),
-                        ),
-                        _Metric(
-                          label: '已完成',
-                          value: '${completedPlans.length}',
-                          onTap: () => _showPlans(completedPlans, '已完成计划'),
-                        ),
-                        _Metric(
-                          label: '进行中',
-                          value: '${unfinishedPlans.length}',
-                          onTap: () => _showPlans(unfinishedPlans, '进行中计划'),
-                        ),
-                        _Metric(
-                          label: '完成率',
-                          value: planCohort.isEmpty
-                              ? '—'
-                              : '${(completedPlans.length / planCohort.length * 100).round()}%',
-                          onTap: () => _showPlans(planCohort, '本周期计划'),
-                        ),
-                      ],
-                    ),
-                    _Panel(
-                      title: '计划清单',
-                      child: planCohort.isEmpty
-                          ? const Padding(
-                              padding: EdgeInsets.all(20),
-                              child: Center(child: Text('本周期没有计划')),
-                            )
-                          : Column(
-                              children: planCohort
-                                  .map(
-                                    (plan) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 8),
-                                      child: PlanCard(
-                                        plan: plan,
-                                        controller: widget.controller,
-                                        onTap: () => showPlanEditor(
-                                          context,
-                                          widget.controller,
-                                          plan: plan,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                            ),
-                    ),
+                    ..._buildPlanStats(context, planCohort, startText, endText),
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 14),
                       child: Text(
-                        '计划按时间范围与当前统计周期是否重叠计算。',
+                        '计划按时间范围与当前统计周期是否重叠计算；完成率使用计划当前进度，不是历史快照。',
                         style: TextStyle(fontSize: 12),
                       ),
                     ),
@@ -393,27 +323,14 @@ class _StatsPageState extends State<StatsPage>
                       crossAxisCount: 4,
                       childAspectRatio: .9,
                       children: [
-                        _Metric(
-                          label: '安排',
-                          value: '${cohort.length}',
-                          onTap: () => _showTasks(cohort, '本周期安排'),
-                        ),
-                        _Metric(
-                          label: '已完成',
-                          value: '${complete.length}',
-                          onTap: () => _showTasks(complete, '本周期已完成'),
-                        ),
-                        _Metric(
-                          label: '未完成',
-                          value: '${unfinished.length}',
-                          onTap: () => _showTasks(unfinished, '本周期未完成'),
-                        ),
+                        _Metric(label: '安排', value: '${cohort.length}'),
+                        _Metric(label: '已完成', value: '${complete.length}'),
+                        _Metric(label: '未完成', value: '${unfinished.length}'),
                         _Metric(
                           label: '完成率',
                           value: cohort.isEmpty
                               ? '—'
                               : '${(complete.length / cohort.length * 100).round()}%',
-                          onTap: () => _showTasks(cohort, '本周期安排'),
                         ),
                       ],
                     ),
@@ -461,19 +378,6 @@ class _StatsPageState extends State<StatsPage>
                                     widget.controller
                                         .statusOf(matching.statusId)
                                         .color,
-                                onTap: () => _showTasks(
-                                  unfinished
-                                      .where(
-                                        (task) =>
-                                            (task.progress?.currentNode?.name ??
-                                                widget.controller
-                                                    .statusOf(task.statusId)
-                                                    .name) ==
-                                            statusName,
-                                      )
-                                      .toList(),
-                                  statusName,
-                                ),
                               );
                             }).toList(),
                       ),
@@ -495,32 +399,18 @@ class _StatsPageState extends State<StatsPage>
                                       color: Theme.of(context)
                                           .colorScheme
                                           .primary,
-                                      onTap: () => _showTasks(
-                                        unfinished
-                                            .where(
-                                              (task) =>
-                                                  (task.reason.isEmpty
-                                                      ? '未填写'
-                                                      : task.reason) ==
-                                                  entry.key,
-                                            )
-                                            .toList(),
-                                        entry.key,
-                                      ),
                                     ),
                                   )
                                   .toList(),
                             ),
                     ),
-                    OutlinedButton(
-                      onPressed: () => _showTasks(
-                        widget.controller.tasks
-                            .where((task) => task.startDate.isEmpty)
-                            .toList(),
-                        '未安排日期',
-                      ),
-                      child: Text(
-                        '未安排日期：${widget.controller.tasks.where((task) => task.startDate.isEmpty).length} 项（不计入周期）',
+                    _Panel(
+                      title: '周期外事项',
+                      child: _InlineStatistic(
+                        label: '未安排日期',
+                        value:
+                            '${widget.controller.tasks.where((task) => task.startDate.isEmpty).length} 项',
+                        note: '不计入当前周期统计',
                       ),
                     ),
                     const Padding(
@@ -540,6 +430,150 @@ class _StatsPageState extends State<StatsPage>
         ),
       ],
     );
+  }
+
+  List<Widget> _buildPlanStats(
+    BuildContext context,
+    List<PlanItem> plans,
+    String periodStart,
+    String periodEnd,
+  ) {
+    final completed = plans.where((plan) => plan.progress.completed).length;
+    final progressGroups = <String, _PlanProgressStat>{};
+    for (final plan in plans) {
+      final node = plan.progress.currentNode;
+      final label = node?.name ?? '未设置进度';
+      final current = progressGroups[label];
+      progressGroups[label] = _PlanProgressStat(
+        label: label,
+        count: (current?.count ?? 0) + 1,
+        color:
+            current?.color ??
+            node?.color ??
+            Theme.of(context).colorScheme.outline,
+      );
+    }
+    final progressStats = progressGroups.values.toList()
+      ..sort((a, b) {
+        final countCompare = b.count.compareTo(a.count);
+        return countCompare != 0 ? countCompare : a.label.compareTo(b.label);
+      });
+
+    final periodCounts = <_PlanPeriodType, int>{
+      for (final type in _PlanPeriodType.values) type: 0,
+    };
+    for (final plan in plans) {
+      final startsInPeriod = plan.startDate.compareTo(periodStart) >= 0;
+      final endsInPeriod = plan.targetDate.compareTo(periodEnd) <= 0;
+      final type = switch ((startsInPeriod, endsInPeriod)) {
+        (true, true) => _PlanPeriodType.within,
+        (false, true) => _PlanPeriodType.carriedIn,
+        (true, false) => _PlanPeriodType.carriedOut,
+        (false, false) => _PlanPeriodType.spanning,
+      };
+      periodCounts[type] = periodCounts[type]! + 1;
+    }
+
+    final categoryGroups = <String, List<PlanItem>>{};
+    for (final plan in plans) {
+      final name = plan.categoryName.isEmpty ? '未分类' : plan.categoryName;
+      categoryGroups.putIfAbsent(name, () => []).add(plan);
+    }
+    final categoryStats =
+        categoryGroups.entries.map((entry) {
+          final items = entry.value;
+          return _PlanCategoryStat(
+            label: entry.key,
+            count: items.length,
+            completed: items.where((plan) => plan.progress.completed).length,
+            color: Color(items.first.categoryColorValue),
+          );
+        }).toList()..sort((a, b) {
+          final countCompare = b.count.compareTo(a.count);
+          return countCompare != 0 ? countCompare : a.label.compareTo(b.label);
+        });
+    final visibleCategoryStats = categoryStats.length <= 5
+        ? categoryStats
+        : <_PlanCategoryStat>[
+            ...categoryStats.take(5),
+            _PlanCategoryStat(
+              label: '其他',
+              count: categoryStats
+                  .skip(5)
+                  .fold(0, (sum, stat) => sum + stat.count),
+              completed: categoryStats
+                  .skip(5)
+                  .fold(0, (sum, stat) => sum + stat.completed),
+              color: Theme.of(context).colorScheme.outline,
+            ),
+          ];
+
+    final milestones = plans.expand((plan) => plan.milestones).toList();
+    final completedMilestones = milestones
+        .where((milestone) => milestone.completed)
+        .length;
+    final dueMilestones = milestones
+        .where(
+          (milestone) =>
+              milestone.date.compareTo(periodStart) >= 0 &&
+              milestone.date.compareTo(periodEnd) <= 0,
+        )
+        .length;
+
+    return [
+      _CompletionOverview(
+        title: '计划完成概览',
+        total: plans.length,
+        completed: completed,
+        itemLabel: '个计划',
+      ),
+      _Panel(
+        title: '当前进度分布',
+        child: progressStats.isEmpty
+            ? const _StatisticsEmpty(label: '本周期暂无计划数据')
+            : Column(
+                children: progressStats
+                    .map(
+                      (stat) => _Distribution(
+                        label: stat.label,
+                        count: stat.count,
+                        total: plans.length,
+                        color: stat.color,
+                      ),
+                    )
+                    .toList(),
+              ),
+      ),
+      _Panel(
+        title: '计划与本周期的关系',
+        child: _PlanPeriodGrid(counts: periodCounts, total: plans.length),
+      ),
+      _Panel(
+        title: '分类分布',
+        child: visibleCategoryStats.isEmpty
+            ? const _StatisticsEmpty(label: '本周期暂无分类数据')
+            : Column(
+                children: visibleCategoryStats
+                    .map(
+                      (stat) => _CategoryDistribution(
+                        stat: stat,
+                        total: plans.length,
+                      ),
+                    )
+                    .toList(),
+              ),
+      ),
+      _Panel(
+        title: '里程碑概览',
+        child: milestones.isEmpty
+            ? const _StatisticsEmpty(label: '当前计划暂无里程碑')
+            : _MilestoneOverview(
+                total: milestones.length,
+                completed: completedMilestones,
+                dueInPeriod: dueMilestones,
+              ),
+      ),
+    ];
   }
 
   Widget _buildQuadrantStats(
@@ -568,35 +602,45 @@ class _StatsPageState extends State<StatsPage>
                   ? doneCompare
                   : a.title.compareTo(b.title);
             });
-      return _QuadrantGroup(
-        definition: definition,
-        entries: matchingEntries,
-      );
+      return _QuadrantGroup(definition: definition, entries: matchingEntries);
     }).toList();
-    return LayoutBuilder(
-      builder: (context, constraints) => GridView.builder(
-        physics: const NeverScrollableScrollPhysics(),
-        padding: EdgeInsets.zero,
-        itemCount: groups.length,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          mainAxisExtent: (constraints.maxHeight - 10) / 2,
+    final classifiedEntries = groups.expand((group) => group.entries).toSet();
+    final completed = classifiedEntries
+        .where((entry) => entry.completed)
+        .length;
+    return Column(
+      children: [
+        _QuadrantOverview(
+          total: classifiedEntries.length,
+          completed: completed,
+          itemLabel: '象限事项',
+          progressLabel: '四象限事项完成率',
         ),
-        itemBuilder: (context, index) {
-          final group = groups[index];
-          return _QuadrantCard(
-            group: group,
-            emptyLabel: _emptyScopeLabel,
-            onOpenAll: () => _showEntries(
-              group.entries,
-              group.definition.name,
+        const SizedBox(height: 10),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) => GridView.builder(
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.zero,
+              itemCount: groups.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                mainAxisExtent: (constraints.maxHeight - 10) / 2,
+              ),
+              itemBuilder: (context, index) {
+                final group = groups[index];
+                return _QuadrantCard(
+                  group: group,
+                  emptyLabel: _emptyScopeLabel,
+                  onOpenEntry: _openEntry,
+                );
+              },
             ),
-            onOpenEntry: _openEntry,
-          );
-        },
-      ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -644,8 +688,8 @@ class _StatsPageState extends State<StatsPage>
               color: definition.color,
               icon: definition.icon,
               entries: matchingEntries,
-              unfinished: matchingEntries
-                  .where((entry) => !entry.completed)
+              completed: matchingEntries
+                  .where((entry) => entry.completed)
                   .length,
             );
           }),
@@ -666,39 +710,48 @@ class _StatsPageState extends State<StatsPage>
                   ? Icons.history
                   : taskTagIcons[snapshot.iconName],
               entries: matchingEntries,
-              unfinished: matchingEntries
-                  .where((entry) => !entry.completed)
+              completed: matchingEntries
+                  .where((entry) => entry.completed)
                   .length,
             );
           }),
-        ]..sort((a, b) {
-          final countCompare = b.entries.length.compareTo(a.entries.length);
-          return countCompare != 0 ? countCompare : a.name.compareTo(b.name);
-        });
-    return _Panel(
-      title: '其他标签统计',
-      child: stats.isEmpty
-          ? const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Text('本周期没有其他标签数据。'),
-            )
-          : Column(
-              children: [
-                ...stats.map(
-                  (stat) => _OtherTagStatRow(
-                    stat: stat,
-                    onTap: () => _showEntries(stat.entries, stat.name),
-                  ),
+        ]
+          ..removeWhere((stat) => stat.entries.isEmpty)
+          ..sort((a, b) {
+            final countCompare = b.entries.length.compareTo(a.entries.length);
+            return countCompare != 0 ? countCompare : a.name.compareTo(b.name);
+          });
+    final taggedEntries = stats.expand((stat) => stat.entries).toSet();
+    final completed = taggedEntries.where((entry) => entry.completed).length;
+    return Column(
+      children: [
+        _QuadrantOverview(
+          total: taggedEntries.length,
+          completed: completed,
+          itemLabel: '标签事项',
+          progressLabel: '标签事项完成率',
+        ),
+        _Panel(
+          title: '其他标签统计',
+          child: stats.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('本周期没有其他标签数据。'),
+                )
+              : Column(
+                  children: [
+                    ...stats.map((stat) => _OtherTagStatRow(stat: stat)),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        '右侧数字为已完成/总数；${_scopeItemText}可计入多个普通标签。',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ),
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    '右侧数字为未完成/总数；${_scopeItemText}可计入多个普通标签。',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                ),
-              ],
-            ),
+        ),
+      ],
     );
   }
 
@@ -712,10 +765,7 @@ class _StatsPageState extends State<StatsPage>
     return task.tags.contains(definition.name);
   }
 
-  bool _entryHasTagDefinition(
-    _StatEntry entry,
-    TaskTagDefinition definition,
-  ) {
+  bool _entryHasTagDefinition(_StatEntry entry, TaskTagDefinition definition) {
     for (final snapshot in entry.tags) {
       if (snapshot.sourceTagId == definition.id ||
           (snapshot.sourceTagId == null && snapshot.name == definition.name)) {
@@ -725,10 +775,7 @@ class _StatsPageState extends State<StatsPage>
     return entry.tagNames.contains(definition.name);
   }
 
-  List<_StatEntry> _statEntries(
-    List<PlanItem> plans,
-    List<TaskItem> tasks,
-  ) => [
+  List<_StatEntry> _statEntries(List<PlanItem> plans, List<TaskItem> tasks) => [
     if (widget.criteria.scope != StatScope.tasks)
       ...plans.map(_StatEntry.fromPlan),
     if (widget.criteria.scope != StatScope.plans)
@@ -816,123 +863,6 @@ class _StatsPageState extends State<StatsPage>
     }
     return result;
   }
-
-  void _showTasks(List<TaskItem> tasks, String title) =>
-      showModalBottomSheet<void>(
-        context: context,
-        useSafeArea: true,
-        isScrollControlled: true,
-        builder: (context) => DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: .8,
-          builder: (context, scroll) => ListView(
-            controller: scroll,
-            padding: const EdgeInsets.all(18),
-            children: [
-              Text(title, style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 14),
-              if (tasks.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(30),
-                  child: Center(child: Text('没有任务')),
-                ),
-              ...tasks.map(
-                (task) => TaskCard(
-                  task: task,
-                  controller: widget.controller,
-                  nested: task.parentTaskId != null,
-                  onTap: () =>
-                      showTaskEditor(context, widget.controller, task: task),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-
-  void _showPlans(List<PlanItem> plans, String title) =>
-      showModalBottomSheet<void>(
-        context: context,
-        useSafeArea: true,
-        isScrollControlled: true,
-        builder: (context) => DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: .8,
-          builder: (context, scroll) => ListView(
-            controller: scroll,
-            padding: const EdgeInsets.all(18),
-            children: [
-              Text(title, style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 14),
-              if (plans.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(30),
-                  child: Center(child: Text('没有计划')),
-                ),
-              ...plans.map(
-                (plan) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: PlanCard(
-                    plan: plan,
-                    controller: widget.controller,
-                    onTap: () =>
-                        showPlanEditor(context, widget.controller, plan: plan),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-
-  void _showEntries(List<_StatEntry> entries, String title) =>
-      showModalBottomSheet<void>(
-        context: context,
-        useSafeArea: true,
-        isScrollControlled: true,
-        builder: (context) => DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: .8,
-          builder: (context, scroll) => ListView(
-            controller: scroll,
-            padding: const EdgeInsets.all(18),
-            children: [
-              Text(title, style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 14),
-              if (entries.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(30),
-                  child: Center(child: Text(_emptyScopeLabel)),
-                ),
-              ...entries.map((entry) {
-                final plan = entry.plan;
-                if (plan != null) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: PlanCard(
-                      plan: plan,
-                      controller: widget.controller,
-                      onTap: () => showPlanEditor(
-                        context,
-                        widget.controller,
-                        plan: plan,
-                      ),
-                    ),
-                  );
-                }
-                final task = entry.task!;
-                return TaskCard(
-                  task: task,
-                  controller: widget.controller,
-                  nested: task.parentTaskId != null,
-                  onTap: () =>
-                      showTaskEditor(context, widget.controller, task: task),
-                );
-              }),
-            ],
-          ),
-        ),
-      );
 }
 
 class _StatEntry {
@@ -981,13 +911,11 @@ class _QuadrantCard extends StatelessWidget {
   const _QuadrantCard({
     required this.group,
     required this.emptyLabel,
-    required this.onOpenAll,
     required this.onOpenEntry,
   });
 
   final _QuadrantGroup group;
   final String emptyLabel;
-  final VoidCallback onOpenAll;
   final ValueChanged<_StatEntry> onOpenEntry;
 
   @override
@@ -1005,41 +933,51 @@ class _QuadrantCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            InkWell(
-              onTap: onOpenAll,
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  children: [
-                    Icon(
-                      group.definition.icon,
-                      size: 15,
-                      color: group.definition.color,
-                    ),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        group.definition.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: group.definition.color,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$completed/${group.entries.length}',
-                      style: const TextStyle(
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                children: [
+                  Icon(
+                    group.definition.icon,
+                    size: 15,
+                    color: group.definition.color,
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      group.definition.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: group.definition.color,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$completed/${group.entries.length}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Semantics(
+              label: '${group.definition.name}完成率',
+              value: group.entries.isEmpty
+                  ? '无数据'
+                  : '${(completed / group.entries.length * 100).round()}%',
+              child: LinearProgressIndicator(
+                value: group.entries.isEmpty
+                    ? 0
+                    : completed / group.entries.length,
+                color: group.definition.color,
+                minHeight: 3,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
             const Divider(height: 10),
@@ -1069,7 +1007,7 @@ class _QuadrantCard extends StatelessWidget {
                               children: [
                                 Icon(
                                   done
-                                      ? Icons.check_circle_outline
+                                      ? Icons.check_circle
                                       : Icons.radio_button_unchecked,
                                   size: 12,
                                   color: done
@@ -1086,9 +1024,6 @@ class _QuadrantCard extends StatelessWidget {
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
                                       fontSize: 11,
-                                      decoration: done
-                                          ? TextDecoration.lineThrough
-                                          : null,
                                       color: done
                                           ? Theme.of(context)
                                                 .colorScheme
@@ -1117,46 +1052,462 @@ class _OtherTagStat {
     required this.color,
     required this.icon,
     required this.entries,
-    required this.unfinished,
+    required this.completed,
   });
 
   final String name;
   final Color? color;
   final IconData? icon;
   final List<_StatEntry> entries;
-  final int unfinished;
+  final int completed;
 }
 
 class _OtherTagStatRow extends StatelessWidget {
-  const _OtherTagStatRow({required this.stat, required this.onTap});
+  const _OtherTagStatRow({required this.stat});
 
   final _OtherTagStat stat;
-  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(8),
-    child: Padding(
+  Widget build(BuildContext context) {
+    final color = stat.color ?? Theme.of(context).colorScheme.primary;
+    final total = stat.entries.length;
+    return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(
+      child: Column(
         children: [
-          Icon(stat.icon ?? Icons.label_outline, size: 16, color: stat.color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              stat.name,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12),
-            ),
+          Row(
+            children: [
+              Icon(stat.icon ?? Icons.label_outline, size: 16, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  stat.name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+              Text(
+                '${stat.completed}/$total',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-          Text(
-            '${stat.unfinished}/${stat.entries.length}',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          const SizedBox(height: 5),
+          Semantics(
+            label: '${stat.name}完成率',
+            value: total == 0
+                ? '无数据'
+                : '${(stat.completed / total * 100).round()}%',
+            child: LinearProgressIndicator(
+              value: total == 0 ? 0 : stat.completed / total,
+              color: color,
+              minHeight: 4,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CompletionOverview extends StatelessWidget {
+  const _CompletionOverview({
+    required this.title,
+    required this.total,
+    required this.completed,
+    required this.itemLabel,
+  });
+
+  final String title;
+  final int total;
+  final int completed;
+  final String itemLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = total == 0 ? 0.0 : completed / total;
+    final percentage = total == 0 ? '—' : '${(ratio * 100).round()}%';
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  percentage,
+                  style: Theme.of(context).textTheme.headlineLarge
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 5),
+                    child: Text(
+                      total == 0
+                          ? '本周期暂无计划数据'
+                          : '$completed 已完成 / $total $itemLabel',
+                      textAlign: TextAlign.end,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Semantics(
+              label: title,
+              value: total == 0 ? '无数据' : percentage,
+              child: LinearProgressIndicator(
+                value: ratio,
+                minHeight: 8,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatisticsEmpty extends StatelessWidget {
+  const _StatisticsEmpty({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 14),
+    child: Center(
+      child: Text(
+        label,
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+      ),
     ),
+  );
+}
+
+class _PlanProgressStat {
+  const _PlanProgressStat({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
+
+  final String label;
+  final int count;
+  final Color color;
+}
+
+enum _PlanPeriodType { within, carriedIn, carriedOut, spanning }
+
+extension on _PlanPeriodType {
+  String get label => switch (this) {
+    _PlanPeriodType.within => '本期内',
+    _PlanPeriodType.carriedIn => '前期延续',
+    _PlanPeriodType.carriedOut => '后期延续',
+    _PlanPeriodType.spanning => '跨越整期',
+  };
+
+  String get description => switch (this) {
+    _PlanPeriodType.within => '本期开始并收尾',
+    _PlanPeriodType.carriedIn => '前期开始，本期收尾',
+    _PlanPeriodType.carriedOut => '本期开始，后续持续',
+    _PlanPeriodType.spanning => '覆盖整个统计周期',
+  };
+}
+
+class _PlanPeriodGrid extends StatelessWidget {
+  const _PlanPeriodGrid({required this.counts, required this.total});
+
+  final Map<_PlanPeriodType, int> counts;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 620 ? 4 : 2;
+      return GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: columns,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: columns == 4 ? 1.55 : 1.9,
+        children: _PlanPeriodType.values.map((type) {
+          final count = counts[type] ?? 0;
+          final percentage = total == 0 ? 0 : (count / total * 100).round();
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          type.label,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Text(
+                        '$count',
+                        style: Theme.of(context).textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$percentage% · ${type.description}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      );
+    },
+  );
+}
+
+class _PlanCategoryStat {
+  const _PlanCategoryStat({
+    required this.label,
+    required this.count,
+    required this.completed,
+    required this.color,
+  });
+
+  final String label;
+  final int count;
+  final int completed;
+  final Color color;
+}
+
+class _CategoryDistribution extends StatelessWidget {
+  const _CategoryDistribution({required this.stat, required this.total});
+
+  final _PlanCategoryStat stat;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final share = total == 0 ? 0.0 : stat.count / total;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 90,
+                child: Text(stat.label, overflow: TextOverflow.ellipsis),
+              ),
+              Expanded(
+                child: Semantics(
+                  label: '${stat.label}计划占比',
+                  value: '${(share * 100).round()}%',
+                  child: LinearProgressIndicator(
+                    value: share,
+                    color: stat.color,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 82,
+                child: Text(
+                  '${stat.count} · ${stat.completed}/${stat.count}完成',
+                  textAlign: TextAlign.end,
+                  style: const TextStyle(fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MilestoneOverview extends StatelessWidget {
+  const _MilestoneOverview({
+    required this.total,
+    required this.completed,
+    required this.dueInPeriod,
+  });
+
+  final int total;
+  final int completed;
+  final int dueInPeriod;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = total == 0 ? 0.0 : completed / total;
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _CompactStatistic(value: '$total', label: '里程碑'),
+            ),
+            Expanded(
+              child: _CompactStatistic(value: '$completed', label: '已完成'),
+            ),
+            Expanded(
+              child: _CompactStatistic(value: '$dueInPeriod', label: '本期到期'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Semantics(
+          label: '里程碑完成率',
+          value: '${(ratio * 100).round()}%',
+          child: LinearProgressIndicator(
+            value: ratio,
+            minHeight: 6,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _QuadrantOverview extends StatelessWidget {
+  const _QuadrantOverview({
+    required this.total,
+    required this.completed,
+    required this.itemLabel,
+    required this.progressLabel,
+  });
+
+  final int total;
+  final int completed;
+  final String itemLabel;
+  final String progressLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final incomplete = total - completed;
+    final ratio = total == 0 ? 0.0 : completed / total;
+    final percentage = '${(ratio * 100).round()}%';
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: _CompactStatistic(
+                    value: '$incomplete',
+                    label: '未完成',
+                  ),
+                ),
+                Expanded(
+                  child: _CompactStatistic(value: '$completed', label: '已完成'),
+                ),
+                Expanded(
+                  child: _CompactStatistic(value: '$total', label: itemLabel),
+                ),
+                Expanded(
+                  child: _CompactStatistic(
+                    value: percentage,
+                    label: '完成率',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 7),
+            Semantics(
+              label: progressLabel,
+              value: total == 0 ? '无数据' : percentage,
+              child: LinearProgressIndicator(
+                value: ratio,
+                minHeight: 5,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactStatistic extends StatelessWidget {
+  const _CompactStatistic({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Text(
+        value,
+        style: Theme.of(context).textTheme.titleMedium
+            ?.copyWith(fontWeight: FontWeight.bold),
+      ),
+      Text(label, style: Theme.of(context).textTheme.bodySmall),
+    ],
+  );
+}
+
+class _InlineStatistic extends StatelessWidget {
+  const _InlineStatistic({
+    required this.label,
+    required this.value,
+    required this.note,
+  });
+
+  final String label;
+  final String value;
+  final String note;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      const Icon(Icons.event_busy_outlined),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(note, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      ),
+      Text(
+        value,
+        style: Theme.of(context).textTheme.titleMedium
+            ?.copyWith(fontWeight: FontWeight.bold),
+      ),
+    ],
   );
 }
 
@@ -1215,9 +1566,7 @@ class StatsFilterDrawer extends StatelessWidget {
       ],
     );
     final tags = controller.orderedTagNames([
-      ...controller.plans.expand(
-        (plan) => plan.tags.map((tag) => tag.name),
-      ),
+      ...controller.plans.expand((plan) => plan.tags.map((tag) => tag.name)),
       ...controller.tasks.expand((task) => task.tags),
     ]);
     return Drawer(
@@ -1279,10 +1628,7 @@ class StatsFilterDrawer extends StatelessWidget {
                     ),
                   ),
                   const Divider(height: 28),
-                  Text(
-                    '统计周期',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                  Text('统计周期', style: Theme.of(context).textTheme.titleMedium),
                   ...StatMode.values.map(
                     (mode) => RadioListTile<StatMode>(
                       value: mode,
@@ -1321,18 +1667,14 @@ class StatsFilterDrawer extends StatelessWidget {
                     initialValue: criteria.categoryName,
                     decoration: const InputDecoration(labelText: '分类'),
                     items: [
-                      const DropdownMenuItem(
-                        value: '',
-                        child: Text('全部分类'),
-                      ),
+                      const DropdownMenuItem(value: '', child: Text('全部分类')),
                       ...categories.map(
                         (name) =>
                             DropdownMenuItem(value: name, child: Text(name)),
                       ),
                     ],
-                    onChanged: (value) => onChanged(
-                      criteria.copyWith(categoryName: value ?? ''),
-                    ),
+                    onChanged: (value) =>
+                        onChanged(criteria.copyWith(categoryName: value ?? '')),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
@@ -1342,10 +1684,7 @@ class StatsFilterDrawer extends StatelessWidget {
                     initialValue: criteria.progressTemplateName,
                     decoration: const InputDecoration(labelText: '进度方案'),
                     items: [
-                      const DropdownMenuItem(
-                        value: '',
-                        child: Text('全部进度方案'),
-                      ),
+                      const DropdownMenuItem(value: '', child: Text('全部进度方案')),
                       ...templates.map(
                         (name) =>
                             DropdownMenuItem(value: name, child: Text(name)),
@@ -1366,9 +1705,7 @@ class StatsFilterDrawer extends StatelessWidget {
                         '${criteria.progressNodeName}',
                       ),
                       initialValue: criteria.progressNodeName,
-                      decoration: const InputDecoration(
-                        labelText: '进度节点',
-                      ),
+                      decoration: const InputDecoration(labelText: '进度节点'),
                       items: [
                         const DropdownMenuItem(
                           value: '',
@@ -1384,46 +1721,8 @@ class StatsFilterDrawer extends StatelessWidget {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    key: ValueKey('stat-plan-${criteria.planId}'),
-                    initialValue: criteria.planId,
-                    decoration: const InputDecoration(labelText: '所属计划'),
-                    items: [
-                      const DropdownMenuItem(
-                        value: '',
-                        child: Text('全部计划'),
-                      ),
-                      ...controller.plans.map(
-                        (plan) => DropdownMenuItem(
-                          value: plan.id,
-                          child: Text(plan.name),
-                        ),
-                      ),
-                      ...controller.tasks
-                          .map((task) => task.planId)
-                          .whereType<String>()
-                          .toSet()
-                          .where(
-                            (id) => !controller.plans.any(
-                              (plan) => plan.id == id,
-                            ),
-                          )
-                          .map(
-                            (id) => DropdownMenuItem(
-                              value: id,
-                              child: Text('$id（历史计划）'),
-                            ),
-                          ),
-                    ],
-                    onChanged: (value) =>
-                        onChanged(criteria.copyWith(planId: value ?? '')),
-                  ),
                   const SizedBox(height: 18),
-                  Text(
-                    '标签',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                  Text('标签', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -1490,30 +1789,21 @@ class StatsFilterDrawer extends StatelessWidget {
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({
-    required this.label,
-    required this.value,
-    required this.onTap,
-  });
+  const _Metric({required this.label, required this.value});
   final String label;
   final String value;
-  final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => Card(
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            value,
-            style: Theme.of(context).textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-        ],
-      ),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          value,
+          style: Theme.of(context).textTheme.headlineSmall
+              ?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+      ],
     ),
   );
 }
@@ -1545,34 +1835,38 @@ class _Distribution extends StatelessWidget {
     required this.count,
     required this.total,
     required this.color,
-    required this.onTap,
   });
   final String label;
   final int count;
   final int total;
   final Color color;
-  final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 90,
-            child: Text(label, overflow: TextOverflow.ellipsis),
-          ),
-          Expanded(
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    child: Row(
+      children: [
+        SizedBox(
+          width: 90,
+          child: Text(label, overflow: TextOverflow.ellipsis),
+        ),
+        Expanded(
+          child: Semantics(
+            label: label,
+            value: total == 0
+                ? '无数据'
+                : '$count，${(count / total * 100).round()}%',
             child: LinearProgressIndicator(
               value: total == 0 ? 0 : count / total,
               color: color,
+              borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(width: 10),
-          Text('$count'),
-        ],
-      ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          total == 0 ? '$count' : '$count  ${(count / total * 100).round()}%',
+        ),
+      ],
     ),
   );
 }

@@ -187,54 +187,39 @@ class _PlanEditorState extends State<PlanEditor> {
                       title: '时间与日历',
                       icon: Icons.calendar_month_outlined,
                       children: [
-                        ResponsiveFieldPair(
-                          first: WorkValueField(
-                            label: '开始日期',
-                            value: startDate,
-                            icon: Icons.event_outlined,
-                            onTap: () => _pickDate(isStart: true),
+                        _buildDateRangeFields(context),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('日历显示'),
+                          subtitle: Text(
+                            _calendarDisplayDescription(calendarDisplayMode),
                           ),
-                          second: WorkValueField(
-                            label: '目标日期',
-                            value: targetDate,
-                            icon: Icons.flag_outlined,
-                            onTap: () => _pickDate(isStart: false),
-                          ),
-                        ),
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isVertical = constraints.maxWidth < 430;
-                            return SegmentedButton<PlanCalendarDisplayMode>(
-                              direction: isVertical
-                                  ? Axis.vertical
-                                  : Axis.horizontal,
-                              expandedInsets: isVertical
-                                  ? null
-                                  : EdgeInsets.zero,
-                              showSelectedIcon: false,
-                              segments: PlanCalendarDisplayMode.values
-                                  .map(
-                                    (mode) => ButtonSegment(
-                                      value: mode,
-                                      label: Text(mode.label),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                calendarDisplayMode.label,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
                                     ),
-                                  )
-                                  .toList(),
-                              selected: {calendarDisplayMode},
-                              onSelectionChanged: (value) => setState(
-                                () => calendarDisplayMode = value.first,
                               ),
-                            );
-                          },
+                              const SizedBox(width: 2),
+                              const Icon(Icons.chevron_right),
+                            ],
+                          ),
+                          onTap: _showCalendarDisplayPicker,
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     WorkFormSection(
-                      title: '提醒与闹铃',
+                      title: '通知与闹铃',
                       icon: Icons.notifications_active_outlined,
                       subtitle: reminders.isEmpty
-                          ? '可设置多个提醒'
+                          ? '可设置多个通知或闹铃'
                           : '${reminders.length} 个提醒',
                       children: [_buildReminderCard(context)],
                     ),
@@ -403,6 +388,115 @@ class _PlanEditorState extends State<PlanEditor> {
     });
   }
 
+  Widget _buildDateRangeFields(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final useVerticalLayout =
+          constraints.maxWidth < 320 ||
+          MediaQuery.textScalerOf(context).scale(1) > 1.3;
+      final startField = WorkValueField(
+        label: '开始日期',
+        value: startDate,
+        icon: Icons.event_outlined,
+        onTap: () => _pickDate(isStart: true),
+      );
+      final targetField = WorkValueField(
+        label: '目标日期',
+        value: targetDate,
+        icon: Icons.flag_outlined,
+        onTap: () => _pickDate(isStart: false),
+      );
+      if (useVerticalLayout) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [startField, const SizedBox(height: 12), targetField],
+        );
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: startField),
+          const SizedBox(width: 12),
+          Expanded(child: targetField),
+        ],
+      );
+    },
+  );
+
+  String _calendarDisplayDescription(PlanCalendarDisplayMode mode) =>
+      switch (mode) {
+        PlanCalendarDisplayMode.wholePeriod => '开始日至目标日每天都显示',
+        PlanCalendarDisplayMode.endpoints => '只在开始日和目标日显示',
+        PlanCalendarDisplayMode.startOnly => '只在计划启动当天显示',
+        PlanCalendarDisplayMode.targetOnly => '只在计划目标当天显示',
+      };
+
+  Future<void> _showCalendarDisplayPicker() async {
+    final selected = await showModalBottomSheet<PlanCalendarDisplayMode>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '日历显示范围',
+                      style: Theme.of(sheetContext).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '决定计划会出现在日历的哪些日期，不会修改开始日期和目标日期。',
+                      style: Theme.of(sheetContext).textTheme.bodyMedium
+                          ?.copyWith(
+                            color: Theme.of(sheetContext)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              RadioGroup<PlanCalendarDisplayMode>(
+                groupValue: calendarDisplayMode,
+                onChanged: (value) {
+                  if (value != null) Navigator.pop(sheetContext, value);
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: PlanCalendarDisplayMode.values
+                      .map(
+                        (mode) => RadioListTile<PlanCalendarDisplayMode>(
+                          value: mode,
+                          title: Text(mode.label),
+                          subtitle: Text(_calendarDisplayDescription(mode)),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                          ),
+                          selected: mode == calendarDisplayMode,
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || selected == null || selected == calendarDisplayMode) {
+      return;
+    }
+    setState(() => calendarDisplayMode = selected);
+  }
+
   Widget _buildReminderCard(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -410,9 +504,9 @@ class _PlanEditorState extends State<PlanEditor> {
         contentPadding: EdgeInsets.zero,
         value: reminderEnabled,
         secondary: const Icon(Icons.notifications_active_outlined),
-        title: const Text('提醒与闹铃'),
+        title: const Text('通知与闹铃'),
         subtitle: Text(
-          reminders.isEmpty ? '可在计划期间内设置多个提醒' : '${reminders.length} 个提醒',
+          reminders.isEmpty ? '可在计划期间内设置多个通知或闹铃' : '${reminders.length} 个提醒',
         ),
         onChanged: (value) => setState(() => reminderEnabled = value),
       ),

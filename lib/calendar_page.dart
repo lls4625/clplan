@@ -16,6 +16,9 @@ const double _weeklyCardSpacing = 10;
 const int _weeklyCardRowCount = 4;
 
 class _CalendarScrollController extends ScrollController {
+  _CalendarScrollController({double initialScrollOffset = 0})
+    : super(initialScrollOffset: initialScrollOffset);
+
   bool _userScrollLocked = false;
 
   void setUserScrollLocked(bool locked) {
@@ -179,7 +182,7 @@ class CalendarPageState extends State<CalendarPage>
   double? handoffPointerY;
   bool handoffMoved = false;
   int pinchSessionGeneration = 0;
-  final scroll = _CalendarScrollController();
+  late final _CalendarScrollController scroll;
   final listKey = GlobalKey();
   final todayKey = GlobalKey();
   final monthKeys = List.generate(12, (_) => GlobalKey());
@@ -198,11 +201,10 @@ class CalendarPageState extends State<CalendarPage>
     weeklyCardHeight =
         widget.controller.preferences.calendarWeeklyCardHeight;
     weeklyPreferenceHeightSeen = weeklyCardHeight;
+    scroll = _CalendarScrollController(
+      initialScrollOffset: _monthRowOffsetForDate(now),
+    );
     scroll.addListener(_syncVisibleMonth);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _revealKey(todayKey, now.month - 1, alignment: .2, animate: false);
-    });
   }
 
   @override
@@ -986,6 +988,12 @@ class CalendarPageState extends State<CalendarPage>
     DateTime date, {
     required double alignment,
   }) {
+    final targetOffset = _monthRowOffsetForDate(date);
+    final viewportExtent = scroll.position.viewportDimension;
+    return targetOffset - (viewportExtent - rowHeight) * alignment;
+  }
+
+  double _monthRowOffsetForDate(DateTime date) {
     var targetOffset = 0.0;
     for (var month = 1; month < date.month; month++) {
       targetOffset +=
@@ -996,9 +1004,7 @@ class CalendarPageState extends State<CalendarPage>
     final leadingDays = DateTime(date.year, date.month, 1).weekday - 1;
     final weekIndex = (leadingDays + date.day - 1) ~/ 7;
     targetOffset += _calendarMonthHeaderExtent + weekIndex * rowHeight;
-
-    final viewportExtent = scroll.position.viewportDimension;
-    return targetOffset - (viewportExtent - rowHeight) * alignment;
+    return targetOffset;
   }
 
   Future<void> _saveScaledRowHeight() async {
@@ -1317,17 +1323,31 @@ class _WeeklyDayCardState extends State<_WeeklyDayCard> {
                               const SizedBox(height: 3),
                           itemBuilder: (context, index) {
                             final plan = plans[index];
+                            final completed = plan.progress.completed;
+                            final planColor =
+                                plan.progress.currentNode?.color ??
+                                Color(plan.categoryColorValue);
                             return Row(
                               children: [
-                                Container(
-                                  width: 5,
-                                  height: 5,
-                                  decoration: BoxDecoration(
-                                    color:
-                                        plan.progress.currentNode?.color ??
-                                        Color(plan.categoryColorValue),
-                                    shape: BoxShape.circle,
-                                  ),
+                                SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: completed
+                                      ? Icon(
+                                          Icons.check_circle,
+                                          size: 12,
+                                          color: colorScheme.onSurfaceVariant,
+                                        )
+                                      : Center(
+                                          child: Container(
+                                            width: 5,
+                                            height: 5,
+                                            decoration: BoxDecoration(
+                                              color: planColor,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                        ),
                                 ),
                                 const SizedBox(width: 5),
                                 Expanded(
@@ -1396,6 +1416,7 @@ class _CalendarWeekRow extends StatelessWidget {
     final days = DateTime(year, month + 1, 0).day;
     final offset = DateTime(year, month, 1).weekday - 1;
     final height = rowHeight;
+    final colorScheme = Theme.of(context).colorScheme;
     final planLimit = AppPreferences.estimatedCalendarItemCount(height);
     final markerSize = (height - 6).clamp(14, 25).toDouble();
     return Row(
@@ -1465,9 +1486,10 @@ class _CalendarWeekRow extends StatelessWidget {
                         child: Wrap(
                           spacing: 3,
                           children: plans.take(4).map((plan) {
-                            final color =
-                                plan.progress.currentNode?.color ??
-                                Color(plan.categoryColorValue);
+                            final color = plan.progress.completed
+                                ? colorScheme.onSurfaceVariant
+                                : plan.progress.currentNode?.color ??
+                                      Color(plan.categoryColorValue);
                             return Container(
                               width: 5,
                               height: 5,
@@ -1484,6 +1506,7 @@ class _CalendarWeekRow extends StatelessWidget {
                     final color =
                         plan.progress.currentNode?.color ??
                         Color(plan.categoryColorValue);
+                    final completed = plan.progress.completed;
                     return Container(
                       width: double.infinity,
                       margin: const EdgeInsets.only(top: 3),
@@ -1492,7 +1515,9 @@ class _CalendarWeekRow extends StatelessWidget {
                         vertical: 1,
                       ),
                       decoration: BoxDecoration(
-                        color: color.withAlpha(30),
+                        color: completed
+                            ? colorScheme.onSurfaceVariant.withAlpha(20)
+                            : color.withAlpha(30),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: _CalendarPlanLabel(
@@ -1536,25 +1561,17 @@ class _CalendarPlanLabel extends StatelessWidget {
           )
         : style;
 
-    return Stack(
-      alignment: Alignment.centerLeft,
-      children: [
-        Text(
+    return Semantics(
+      label: plan.name,
+      value: completed ? '已完成' : '未完成',
+      child: ExcludeSemantics(
+        child: Text(
           plan.name,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: textStyle,
         ),
-        if (completed)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: Align(
-                alignment: Alignment.center,
-                child: Container(height: 1, color: completedColor),
-              ),
-            ),
-          ),
-      ],
+      ),
     );
   }
 }

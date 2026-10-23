@@ -188,7 +188,8 @@ class XlsxService {
   }) {
     const guideRows = <List<String>>[
       ['ClPlan 计划导入说明'],
-      ['“计划名称、开始日期、目标日期”为必填项；保留计划ID可更新同一计划，清空计划ID会新增计划。'],
+      ['“计划名称、开始日期、目标日期”为必填项；计划ID是隐藏且锁定的主键，有主键时更新对应计划，无主键时新增计划。'],
+      ['再次导入只会新增计划或更新相同计划ID的数据，不会删除本地已有的其他计划。'],
       ['分类、进度方案、进度节点、四象限标签均可在“计划”工作表下拉选择。'],
       ['普通标签和联系人可填写多个，请使用英文逗号 , 分隔；可选内容见下方。'],
       [],
@@ -243,7 +244,7 @@ class XlsxService {
     for (var index = 0; index < headings.length; index++) {
       sheet.setColumnWidth(index, index == 3 || index == 4 ? 28 : 20);
       sheet
-          .cell(CellIndex.indexByColumnRow(columnIndex: index, rowIndex: 5))
+          .cell(CellIndex.indexByColumnRow(columnIndex: index, rowIndex: 6))
           .cellStyle = CellStyle(
         bold: true,
         fontColorHex: ExcelColor.white,
@@ -548,7 +549,10 @@ class XlsxService {
     final archive = ZipDecoder().decodeBytes(bytes);
     final workbookFile = archive.findFile('xl/workbook.xml');
     final relationsFile = archive.findFile('xl/_rels/workbook.xml.rels');
-    if (workbookFile == null || relationsFile == null) return bytes;
+    final stylesFile = archive.findFile('xl/styles.xml');
+    if (workbookFile == null || relationsFile == null || stylesFile == null) {
+      return bytes;
+    }
 
     var workbookXml = utf8.decode(workbookFile.content as List<int>);
     final relationsXml = utf8.decode(relationsFile.content as List<int>);
@@ -557,7 +561,7 @@ class XlsxService {
     final planSheetFile = archive.findFile(planSheetPath);
     if (planSheetFile == null) return bytes;
 
-    const guideStartRow = 7;
+    const guideStartRow = 8;
     final quadrantCount = tags.where((tag) => tag.isQuadrant).length;
     final names = <String>[
       _definedName('ClPlanCategories', 'A', categories.length, guideStartRow),
@@ -597,7 +601,53 @@ class XlsxService {
       ArchiveFile(workbookFile.name, workbookData.length, workbookData),
     );
 
+    var stylesXml = utf8.decode(stylesFile.content as List<int>);
+    final cellXfsMatch = RegExp(
+      r'<cellXfs count="(\d+)">',
+    ).firstMatch(stylesXml);
+    if (cellXfsMatch == null) return bytes;
+    final unlockedStyleIndex = int.parse(cellXfsMatch.group(1)!);
+    stylesXml = stylesXml.replaceFirst(
+      cellXfsMatch.group(0)!,
+      '<cellXfs count="${unlockedStyleIndex + 1}">',
+    );
+    const unlockedStyle =
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyProtection="1"><protection locked="0"/></xf>';
+    stylesXml = stylesXml.replaceFirst(
+      '</cellXfs>',
+      '$unlockedStyle</cellXfs>',
+    );
+    final stylesData = utf8.encode(stylesXml);
+    archive.addFile(
+      ArchiveFile(stylesFile.name, stylesData.length, stylesData),
+    );
+
     var sheetXml = utf8.decode(planSheetFile.content as List<int>);
+    sheetXml = sheetXml.replaceAllMapped(RegExp(r'<col\b[^>]*/>'), (match) {
+      var columnXml = match.group(0)!;
+      final minimum = RegExp(r'\bmin="(\d+)"').firstMatch(columnXml);
+      final maximum = RegExp(r'\bmax="(\d+)"').firstMatch(columnXml);
+      final minColumn = int.tryParse(minimum?.group(1) ?? '');
+      final maxColumn = int.tryParse(maximum?.group(1) ?? '');
+      if (minColumn == null || maxColumn == null) return columnXml;
+      if (minColumn <= 1 && maxColumn >= 1) {
+        columnXml = _withXmlAttribute(columnXml, 'hidden', '1');
+      }
+      if (minColumn >= 2) {
+        columnXml = _withXmlAttribute(
+          columnXml,
+          'style',
+          '$unlockedStyleIndex',
+        );
+      }
+      return columnXml;
+    });
+    const protection =
+        '<sheetProtection sheet="1" objects="1" scenarios="1" formatColumns="1" selectLockedCells="1" selectUnlockedCells="0"/>';
+    sheetXml = sheetXml.replaceFirst(
+      '</sheetData>',
+      '</sheetData>$protection',
+    );
     const validations = '''<dataValidations count="6">
 <dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorStyle="stop" promptTitle="选择分类" prompt="请选择 App 内已有分类，也可留空。" errorTitle="分类无效" error="请从下拉列表选择分类。" sqref="D2:D5001"><formula1>ClPlanCategories</formula1></dataValidation>
 <dataValidation type="list" allowBlank="0" showInputMessage="1" showErrorMessage="1" errorStyle="stop" promptTitle="选择进度方案" prompt="选择方案后，进度节点下拉会显示对应节点。" errorTitle="进度方案无效" error="请从下拉列表选择进度方案。" sqref="E2:E5001"><formula1>ClPlanProgressTemplates</formula1></dataValidation>
@@ -669,5 +719,17 @@ class XlsxService {
       value ~/= 26;
     }
     return result;
+  }
+
+  static String _withXmlAttribute(
+    String element,
+    String attribute,
+    String value,
+  ) {
+    final expression = RegExp('\\b$attribute="[^"]*"');
+    if (expression.hasMatch(element)) {
+      return element.replaceFirst(expression, '$attribute="$value"');
+    }
+    return element.replaceFirst('/>', ' $attribute="$value"/>');
   }
 }
