@@ -657,74 +657,18 @@ class _StatsPageState extends State<StatsPage>
     final definitions = widget.controller.tagDefinitions
         .where((tag) => !tag.isQuadrant)
         .toList();
-    final definitionIds = widget.controller.tagDefinitions
-        .map((tag) => tag.id)
-        .toSet();
-    final historicalNames = <String>{};
-    for (final entry in entries) {
-      for (final snapshot in entry.tags) {
-        if (!quadrantTagNames.contains(snapshot.name) &&
-            (snapshot.sourceTagId == null ||
-                !definitionIds.contains(snapshot.sourceTagId))) {
-          historicalNames.add(snapshot.name);
-        }
-      }
-      for (final name in entry.tagNames) {
-        final hasSnapshot = entry.tags.any((item) => item.name == name);
-        final hasDefinition = widget.controller.tagDefinitions.any(
-          (item) => item.name == name,
-        );
-        if (!hasSnapshot &&
-            !hasDefinition &&
-            !quadrantTagNames.contains(name)) {
-          historicalNames.add(name);
-        }
-      }
-    }
-    final stats =
-        <_OtherTagStat>[
-          ...definitions.map((definition) {
-            final matchingEntries = entries
-                .where((entry) => _entryHasTagDefinition(entry, definition))
-                .toList();
-            return _OtherTagStat(
-              name: definition.name,
-              color: definition.color,
-              icon: definition.icon,
-              entries: matchingEntries,
-              completed: matchingEntries
-                  .where((entry) => entry.completed)
-                  .length,
-            );
-          }),
-          ...historicalNames.map((name) {
-            final matchingEntries = entries
-                .where((entry) => entry.tagNames.contains(name))
-                .toList();
-            TaskTagSnapshot? snapshot;
-            for (final entry in matchingEntries) {
-              for (final item in entry.tags) {
-                if (item.name == name) snapshot ??= item;
-              }
-            }
-            return _OtherTagStat(
-              name: name,
-              color: snapshot == null ? null : Color(snapshot.colorValue),
-              icon: snapshot == null
-                  ? Icons.history
-                  : taskTagIcons[snapshot.iconName],
-              entries: matchingEntries,
-              completed: matchingEntries
-                  .where((entry) => entry.completed)
-                  .length,
-            );
-          }),
-        ]
-          ..removeWhere((stat) => stat.entries.isEmpty)
-          ..sort((a, b) {
-            final countCompare = b.entries.length.compareTo(a.entries.length);
-            return countCompare != 0 ? countCompare : a.name.compareTo(b.name);
-          });
+    final stats = definitions.map((definition) {
+      final matchingEntries = entries
+          .where((entry) => _entryHasTagDefinition(entry, definition))
+          .toList();
+      return _OtherTagStat(
+        name: definition.name,
+        color: definition.color,
+        icon: definition.icon,
+        entries: matchingEntries,
+        completed: matchingEntries.where((entry) => entry.completed).length,
+      );
+    }).toList();
     final taggedEntries = stats.expand((stat) => stat.entries).toSet();
     final completed = taggedEntries.where((entry) => entry.completed).length;
     return Column(
@@ -739,7 +683,7 @@ class _StatsPageState extends State<StatsPage>
           child: stats.isEmpty
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('本周期没有其他标签数据。'),
+                  child: Text('当前没有自定义标签，可先前往设置添加标签。'),
                 )
               : Column(
                   children: [
