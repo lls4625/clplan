@@ -480,6 +480,16 @@ class _TaskEditorState extends State<TaskEditor> {
                       subtitle: reminders.isEmpty
                           ? '未设置提醒'
                           : '${reminders.length} 个提醒',
+                      trailing: Semantics(
+                        label: '启用通知与闹铃',
+                        child: Switch.adaptive(
+                          value: reminderEnabled,
+                          onChanged: readOnly
+                              ? null
+                              : (value) =>
+                                    setState(() => reminderEnabled = value),
+                        ),
+                      ),
                       children: [
                         ResponsiveFieldPair(
                           first: WorkValueField(
@@ -512,13 +522,16 @@ class _TaskEditorState extends State<TaskEditor> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    WorkFormSection(
-                      title: '联系人',
-                      icon: Icons.people_outline,
-                      subtitle: selectedContacts.isEmpty
-                          ? '未选择'
-                          : '${selectedContacts.length} 人',
-                      children: [_buildContacts(context)],
+                    ContactFormSection(
+                      controller: widget.controller,
+                      selectedContacts: selectedContacts,
+                      readOnly: readOnly,
+                      preserveSnapshots: widget.task != null,
+                      onChanged: (contacts) => setState(() {
+                        selectedContacts
+                          ..clear()
+                          ..addAll(contacts);
+                      }),
                     ),
                     const SizedBox(height: 16),
                     WorkFormSection(
@@ -634,6 +647,14 @@ class _TaskEditorState extends State<TaskEditor> {
                       subtitle: selectedTags.isEmpty
                           ? '未选择'
                           : '${selectedTags.length} 个标签',
+                      trailing: readOnly
+                          ? null
+                          : IconButton(
+                              tooltip: '编辑标签',
+                              onPressed: () =>
+                                  scaffoldKey.currentState?.openEndDrawer(),
+                              icon: const Icon(Icons.edit_outlined),
+                            ),
                       children: [_buildTags(context)],
                     ),
                     const SizedBox(height: 16),
@@ -737,20 +758,6 @@ class _TaskEditorState extends State<TaskEditor> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          value: reminderEnabled,
-          secondary: const Icon(Icons.notifications_none),
-          title: const Text('提醒'),
-          subtitle: Text(
-            reminders.isEmpty
-                ? '可设置一次或多个提醒时间'
-                : '${reminders.length} 个提醒${permissionDisabled ? ' · 系统通知未开启' : ''}',
-          ),
-          onChanged: readOnly
-              ? null
-              : (value) => setState(() => reminderEnabled = value),
-        ),
         if (reminderEnabled || reminders.isNotEmpty) ...[
           if (!hasTaskTime)
             const Padding(
@@ -1216,17 +1223,6 @@ class _TaskEditorState extends State<TaskEditor> {
               );
             }).toList(),
           ),
-        if (!readOnly) ...[
-          const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () => scaffoldKey.currentState?.openEndDrawer(),
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('编辑标签'),
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -1339,19 +1335,6 @@ class _TaskEditorState extends State<TaskEditor> {
     ),
   );
 
-  Widget _buildContacts(BuildContext context) {
-    return ContactSelectionField(
-      controller: widget.controller,
-      selectedContacts: selectedContacts,
-      readOnly: readOnly,
-      preserveSnapshots: widget.task != null,
-      onChanged: (contacts) => setState(() {
-        selectedContacts
-          ..clear()
-          ..addAll(contacts);
-      }),
-    );
-  }
 }
 
 class _Notice extends StatelessWidget {

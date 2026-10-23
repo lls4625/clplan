@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:characters/characters.dart';
 import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
@@ -18,7 +19,20 @@ class ImportResult {
   final List<String> warnings;
 }
 
+class ContactImportResult {
+  const ContactImportResult({
+    required this.contacts,
+    required this.warnings,
+  });
+
+  final List<ContactEntry> contacts;
+  final List<String> warnings;
+}
+
 class XlsxService {
+  static const maxImportFileSizeMegabytes = 50;
+  static const maxImportDataRows = 10000;
+
   static const headers = <String, String>{
     'id': '计划ID',
     'name': '计划名称',
@@ -42,6 +56,13 @@ class XlsxService {
     '仅起止日': PlanCalendarDisplayMode.endpoints,
     '仅开始日': PlanCalendarDisplayMode.startOnly,
     '仅目标日': PlanCalendarDisplayMode.targetOnly,
+  };
+
+  static const contactHeaders = <String, String>{
+    'id': '联系人ID',
+    'name': '姓名',
+    'phone': '电话',
+    'remark': '备注',
   };
 
   static Future<void> exportPlans({
@@ -85,6 +106,49 @@ class XlsxService {
     await file.writeAsBytes(bytes, flush: true);
     await SharePlus.instance.share(
       ShareParams(files: [XFile(file.path)], title: '导出 ClPlan 计划'),
+    );
+  }
+
+  static Future<void> exportContacts({
+    required List<ContactEntry> contacts,
+  }) async {
+    final workbook = Excel.createExcel();
+    final defaultName = workbook.getDefaultSheet();
+    final sheet = workbook['联系人'];
+    final guide = workbook['填写说明'];
+    if (defaultName != null &&
+        defaultName != '联系人' &&
+        defaultName != '填写说明') {
+      workbook.delete(defaultName);
+    }
+
+    _writeContactSheet(sheet, contacts);
+    guide.appendRow([TextCellValue('ClPlan 联系人导入说明')]);
+    guide.appendRow([
+      TextCellValue(
+        '“姓名”为必填项；联系人ID是隐藏且锁定的主键，有主键时更新对应联系人，无主键时新增联系人。',
+      ),
+    ]);
+    guide.appendRow([
+      TextCellValue('再次导入不会删除本地已有的其他联系人；备注最多 100 个字符。'),
+    ]);
+    guide.setColumnWidth(0, 96);
+
+    final rawBytes = workbook.save();
+    if (rawBytes == null) throw StateError('无法生成 XLSX 文件。');
+    final bytes = _protectPrimaryKeyColumn(
+      Uint8List.fromList(rawBytes),
+      sheetName: '联系人',
+    );
+
+    final directory = await getTemporaryDirectory();
+    final now = DateTime.now();
+    final date =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final file = File(p.join(directory.path, 'ClPlan-联系人-$date.xlsx'));
+    await file.writeAsBytes(bytes, flush: true);
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], title: '导出 ClPlan 联系人'),
     );
   }
 
@@ -171,6 +235,40 @@ class XlsxService {
       verticalAlign: VerticalAlign.Center,
     );
     for (var index = 0; index < headers.length; index++) {
+      sheet
+              .cell(CellIndex.indexByColumnRow(columnIndex: index, rowIndex: 0))
+              .cellStyle =
+          headerStyle;
+    }
+    sheet.setRowHeight(0, 26);
+  }
+
+  static void _writeContactSheet(
+    Sheet sheet,
+    List<ContactEntry> contacts,
+  ) {
+    sheet.appendRow(contactHeaders.values.map(TextCellValue.new).toList());
+    for (final contact in contacts) {
+      sheet.appendRow(
+        [
+          contact.id,
+          contact.name,
+          contact.phone,
+          contact.remark,
+        ].map(TextCellValue.new).toList(),
+      );
+    }
+    const widths = <double>[26, 20, 22, 40];
+    for (var index = 0; index < widths.length; index++) {
+      sheet.setColumnWidth(index, widths[index]);
+    }
+    final headerStyle = CellStyle(
+      bold: true,
+      fontColorHex: ExcelColor.white,
+      backgroundColorHex: ExcelColor.fromHexString('#315D8A'),
+      verticalAlign: VerticalAlign.Center,
+    );
+    for (var index = 0; index < contactHeaders.length; index++) {
       sheet
               .cell(CellIndex.indexByColumnRow(columnIndex: index, rowIndex: 0))
               .cellStyle =
@@ -267,8 +365,8 @@ class XlsxService {
     if (selected.isEmpty) return null;
     final file = selected.single;
     final bytes = await file.readAsBytes();
-    if (bytes.length > 10 * 1024 * 1024) {
-      throw FormatException('文件不能超过 10 MB。');
+    if (bytes.length > maxImportFileSizeMegabytes * 1024 * 1024) {
+      throw FormatException('文件不能超过 $maxImportFileSizeMegabytes MB。');
     }
     return parse(
       bytes,
@@ -277,6 +375,93 @@ class XlsxService {
       tags: tags,
       contacts: contacts,
     );
+  }
+
+  static Future<ContactImportResult?> pickAndParseContacts() async {
+    final selected = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['xlsx'],
+    );
+    if (selected.isEmpty) return null;
+    final file = selected.single;
+    final bytes = await file.readAsBytes();
+    if (bytes.length > maxImportFileSizeMegabytes * 1024 * 1024) {
+      throw FormatException('文件不能超过 $maxImportFileSizeMegabytes MB。');
+    }
+    return parseContacts(bytes);
+  }
+
+  static ContactImportResult parseContacts(Uint8List bytes) {
+    final workbook = Excel.decodeBytes(bytes);
+    if (workbook.tables.isEmpty) {
+      throw FormatException('工作簿中没有可读取的工作表。');
+    }
+    final sheet = workbook.tables['联系人'] ?? workbook.tables.values.first;
+    if (sheet.rows.isEmpty) throw FormatException('工作表为空。');
+    if (sheet.maxRows > maxImportDataRows + 1) {
+      throw FormatException('最多导入 $maxImportDataRows 行联系人。');
+    }
+
+    final aliases = <String, String>{};
+    for (final entry in contactHeaders.entries) {
+      aliases[_normalize(entry.key)] = entry.key;
+      aliases[_normalize(entry.value)] = entry.key;
+    }
+    aliases['联系人姓名'] = 'name';
+    aliases['手机'] = 'phone';
+    aliases['手机号'] = 'phone';
+    final mapping = <int, String>{};
+    for (var index = 0; index < sheet.rows.first.length; index++) {
+      final raw = sheet.rows.first[index]?.value?.toString() ?? '';
+      final key = aliases[_normalize(raw)];
+      if (key != null) mapping[index] = key;
+    }
+    if (!mapping.containsValue('name')) {
+      throw FormatException('第一行必须包含“姓名”列。');
+    }
+
+    final contacts = <ContactEntry>[];
+    final warnings = <String>[];
+    final ids = <String>{};
+    for (var rowIndex = 1; rowIndex < sheet.rows.length; rowIndex++) {
+      final row = sheet.rows[rowIndex];
+      final values = <String, String>{};
+      for (final entry in mapping.entries) {
+        values[entry.value] = entry.key < row.length
+            ? (row[entry.key]?.value?.toString().trim() ?? '')
+            : '';
+      }
+      if (values.values.every((value) => value.isEmpty)) continue;
+      final name = values['name'] ?? '';
+      if (name.isEmpty) {
+        warnings.add('第 ${rowIndex + 1} 行缺少姓名，已跳过。');
+        continue;
+      }
+      final remark = values['remark'] ?? '';
+      if (remark.characters.length > maxContactRemarkLength) {
+        warnings.add(
+          '第 ${rowIndex + 1} 行备注超过 $maxContactRemarkLength 个字符，已跳过。',
+        );
+        continue;
+      }
+      final now = DateTime.now();
+      final id = (values['id'] ?? '').isEmpty
+          ? 'xlsx-contact-${now.microsecondsSinceEpoch}-$rowIndex'
+          : values['id']!;
+      if (!ids.add(id)) {
+        warnings.add('第 ${rowIndex + 1} 行联系人 ID 重复，已跳过。');
+        continue;
+      }
+      contacts.add(
+        ContactEntry(
+          id: id,
+          name: name,
+          phone: values['phone'] ?? '',
+          remark: remark,
+        ),
+      );
+    }
+    return ContactImportResult(contacts: contacts, warnings: warnings);
   }
 
   static ImportResult parse(
@@ -292,7 +477,9 @@ class XlsxService {
     }
     final sheet = workbook.tables['计划'] ?? workbook.tables.values.first;
     if (sheet.rows.isEmpty) throw FormatException('工作表为空。');
-    if (sheet.maxRows > 5001) throw FormatException('最多导入 5000 行计划。');
+    if (sheet.maxRows > maxImportDataRows + 1) {
+      throw FormatException('最多导入 $maxImportDataRows 行计划。');
+    }
 
     final aliases = <String, String>{};
     for (final entry in headers.entries) {
@@ -649,12 +836,12 @@ class XlsxService {
       '</sheetData>$protection',
     );
     const validations = '''<dataValidations count="6">
-<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorStyle="stop" promptTitle="选择分类" prompt="请选择 App 内已有分类，也可留空。" errorTitle="分类无效" error="请从下拉列表选择分类。" sqref="D2:D5001"><formula1>ClPlanCategories</formula1></dataValidation>
-<dataValidation type="list" allowBlank="0" showInputMessage="1" showErrorMessage="1" errorStyle="stop" promptTitle="选择进度方案" prompt="选择方案后，进度节点下拉会显示对应节点。" errorTitle="进度方案无效" error="请从下拉列表选择进度方案。" sqref="E2:E5001"><formula1>ClPlanProgressTemplates</formula1></dataValidation>
-<dataValidation type="list" allowBlank="0" showInputMessage="1" showErrorMessage="1" errorStyle="stop" promptTitle="选择进度节点" prompt="节点选项随本行进度方案变化。" errorTitle="进度节点无效" error="请选择当前进度方案中的节点。" sqref="F2:F5001"><formula1>INDIRECT("ClPlanProgressNodes_"&amp;MATCH(\$E2,ClPlanProgressTemplates,0))</formula1></dataValidation>
-<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorStyle="stop" promptTitle="选择四象限" prompt="四象限标签为单选，也可以留空。" errorTitle="四象限标签无效" error="请从下拉列表选择四象限标签。" sqref="G2:G5001"><formula1>ClPlanQuadrants</formula1></dataValidation>
-<dataValidation type="list" allowBlank="0" showErrorMessage="1" errorStyle="stop" errorTitle="日历显示无效" error="请从下拉列表选择日历显示方式。" sqref="L2:L5001"><formula1>ClPlanCalendarModes</formula1></dataValidation>
-<dataValidation type="list" allowBlank="0" showErrorMessage="1" errorStyle="stop" errorTitle="提醒选项无效" error="请选择“是”或“否”。" sqref="M2:M5001"><formula1>ClPlanBooleans</formula1></dataValidation>
+<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorStyle="stop" promptTitle="选择分类" prompt="请选择 App 内已有分类，也可留空。" errorTitle="分类无效" error="请从下拉列表选择分类。" sqref="D2:D10001"><formula1>ClPlanCategories</formula1></dataValidation>
+<dataValidation type="list" allowBlank="0" showInputMessage="1" showErrorMessage="1" errorStyle="stop" promptTitle="选择进度方案" prompt="选择方案后，进度节点下拉会显示对应节点。" errorTitle="进度方案无效" error="请从下拉列表选择进度方案。" sqref="E2:E10001"><formula1>ClPlanProgressTemplates</formula1></dataValidation>
+<dataValidation type="list" allowBlank="0" showInputMessage="1" showErrorMessage="1" errorStyle="stop" promptTitle="选择进度节点" prompt="节点选项随本行进度方案变化。" errorTitle="进度节点无效" error="请选择当前进度方案中的节点。" sqref="F2:F10001"><formula1>INDIRECT("ClPlanProgressNodes_"&amp;MATCH(\$E2,ClPlanProgressTemplates,0))</formula1></dataValidation>
+<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorStyle="stop" promptTitle="选择四象限" prompt="四象限标签为单选，也可以留空。" errorTitle="四象限标签无效" error="请从下拉列表选择四象限标签。" sqref="G2:G10001"><formula1>ClPlanQuadrants</formula1></dataValidation>
+<dataValidation type="list" allowBlank="0" showErrorMessage="1" errorStyle="stop" errorTitle="日历显示无效" error="请从下拉列表选择日历显示方式。" sqref="L2:L10001"><formula1>ClPlanCalendarModes</formula1></dataValidation>
+<dataValidation type="list" allowBlank="0" showErrorMessage="1" errorStyle="stop" errorTitle="提醒选项无效" error="请选择“是”或“否”。" sqref="M2:M10001"><formula1>ClPlanBooleans</formula1></dataValidation>
 </dataValidations>''';
     if (sheetXml.contains('<printOptions')) {
       sheetXml = sheetXml.replaceFirst(
@@ -675,6 +862,79 @@ class XlsxService {
     final sheetData = utf8.encode(sheetXml);
     archive.addFile(
       ArchiveFile(planSheetFile.name, sheetData.length, sheetData),
+    );
+    return Uint8List.fromList(ZipEncoder().encode(archive)!);
+  }
+
+  static Uint8List _protectPrimaryKeyColumn(
+    Uint8List bytes, {
+    required String sheetName,
+  }) {
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final workbookFile = archive.findFile('xl/workbook.xml');
+    final relationsFile = archive.findFile('xl/_rels/workbook.xml.rels');
+    final stylesFile = archive.findFile('xl/styles.xml');
+    if (workbookFile == null || relationsFile == null || stylesFile == null) {
+      return bytes;
+    }
+
+    final workbookXml = utf8.decode(workbookFile.content as List<int>);
+    final relationsXml = utf8.decode(relationsFile.content as List<int>);
+    final sheetPath = _worksheetPath(workbookXml, relationsXml, sheetName);
+    if (sheetPath == null) return bytes;
+    final sheetFile = archive.findFile(sheetPath);
+    if (sheetFile == null) return bytes;
+
+    var stylesXml = utf8.decode(stylesFile.content as List<int>);
+    final cellXfsMatch = RegExp(
+      r'<cellXfs count="(\d+)">',
+    ).firstMatch(stylesXml);
+    if (cellXfsMatch == null) return bytes;
+    final unlockedStyleIndex = int.parse(cellXfsMatch.group(1)!);
+    stylesXml = stylesXml.replaceFirst(
+      cellXfsMatch.group(0)!,
+      '<cellXfs count="${unlockedStyleIndex + 1}">',
+    );
+    const unlockedStyle =
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyProtection="1"><protection locked="0"/></xf>';
+    stylesXml = stylesXml.replaceFirst(
+      '</cellXfs>',
+      '$unlockedStyle</cellXfs>',
+    );
+    final stylesData = utf8.encode(stylesXml);
+    archive.addFile(
+      ArchiveFile(stylesFile.name, stylesData.length, stylesData),
+    );
+
+    var sheetXml = utf8.decode(sheetFile.content as List<int>);
+    sheetXml = sheetXml.replaceAllMapped(RegExp(r'<col\b[^>]*/>'), (match) {
+      var columnXml = match.group(0)!;
+      final minimum = RegExp(r'\bmin="(\d+)"').firstMatch(columnXml);
+      final maximum = RegExp(r'\bmax="(\d+)"').firstMatch(columnXml);
+      final minColumn = int.tryParse(minimum?.group(1) ?? '');
+      final maxColumn = int.tryParse(maximum?.group(1) ?? '');
+      if (minColumn == null || maxColumn == null) return columnXml;
+      if (minColumn <= 1 && maxColumn >= 1) {
+        columnXml = _withXmlAttribute(columnXml, 'hidden', '1');
+      }
+      if (minColumn >= 2) {
+        columnXml = _withXmlAttribute(
+          columnXml,
+          'style',
+          '$unlockedStyleIndex',
+        );
+      }
+      return columnXml;
+    });
+    const protection =
+        '<sheetProtection sheet="1" objects="1" scenarios="1" formatColumns="1" selectLockedCells="1" selectUnlockedCells="0"/>';
+    sheetXml = sheetXml.replaceFirst(
+      '</sheetData>',
+      '</sheetData>$protection',
+    );
+    final sheetData = utf8.encode(sheetXml);
+    archive.addFile(
+      ArchiveFile(sheetFile.name, sheetData.length, sheetData),
     );
     return Uint8List.fromList(ZipEncoder().encode(archive)!);
   }

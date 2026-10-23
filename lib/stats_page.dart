@@ -317,16 +317,21 @@ class _StatsPageState extends State<StatsPage>
                     ),
                   ],
                   if (pageView == StatView.tasks) ...[
-                    GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: 4,
-                      childAspectRatio: .9,
-                      children: [
-                        _Metric(label: '安排', value: '${cohort.length}'),
-                        _Metric(label: '已完成', value: '${complete.length}'),
-                        _Metric(label: '未完成', value: '${unfinished.length}'),
-                        _Metric(
+                    _StatisticsOverview(
+                      statistics: [
+                        _OverviewStatistic(
+                          label: '安排',
+                          value: '${cohort.length}',
+                        ),
+                        _OverviewStatistic(
+                          label: '已完成',
+                          value: '${complete.length}',
+                        ),
+                        _OverviewStatistic(
+                          label: '未完成',
+                          value: '${unfinished.length}',
+                        ),
+                        _OverviewStatistic(
                           label: '完成率',
                           value: cohort.isEmpty
                               ? '—'
@@ -614,7 +619,6 @@ class _StatsPageState extends State<StatsPage>
           total: classifiedEntries.length,
           completed: completed,
           itemLabel: '象限事项',
-          progressLabel: '四象限事项完成率',
         ),
         const SizedBox(height: 10),
         Expanded(
@@ -729,7 +733,6 @@ class _StatsPageState extends State<StatsPage>
           total: taggedEntries.length,
           completed: completed,
           itemLabel: '标签事项',
-          progressLabel: '标签事项完成率',
         ),
         _Panel(
           title: '其他标签统计',
@@ -966,20 +969,6 @@ class _QuadrantCard extends StatelessWidget {
                 ],
               ),
             ),
-            Semantics(
-              label: '${group.definition.name}完成率',
-              value: group.entries.isEmpty
-                  ? '无数据'
-                  : '${(completed / group.entries.length * 100).round()}%',
-              child: LinearProgressIndicator(
-                value: group.entries.isEmpty
-                    ? 0
-                    : completed / group.entries.length,
-                color: group.definition.color,
-                minHeight: 3,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
             const Divider(height: 10),
             Expanded(
               child: group.entries.isEmpty
@@ -1162,16 +1151,6 @@ class _CompletionOverview extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 10),
-            Semantics(
-              label: title,
-              value: total == 0 ? '无数据' : percentage,
-              child: LinearProgressIndicator(
-                value: ratio,
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(4),
-              ),
             ),
           ],
         ),
@@ -1400,58 +1379,57 @@ class _QuadrantOverview extends StatelessWidget {
     required this.total,
     required this.completed,
     required this.itemLabel,
-    required this.progressLabel,
   });
 
   final int total;
   final int completed;
   final String itemLabel;
-  final String progressLabel;
 
   @override
   Widget build(BuildContext context) {
     final incomplete = total - completed;
     final ratio = total == 0 ? 0.0 : completed / total;
     final percentage = '${(ratio * 100).round()}%';
+    return _StatisticsOverview(
+      statistics: [
+        _OverviewStatistic(value: '$incomplete', label: '未完成'),
+        _OverviewStatistic(value: '$completed', label: '已完成'),
+        _OverviewStatistic(value: '$total', label: itemLabel),
+        _OverviewStatistic(value: percentage, label: '完成率'),
+      ],
+    );
+  }
+}
+
+class _OverviewStatistic {
+  const _OverviewStatistic({required this.value, required this.label});
+
+  final String value;
+  final String label;
+}
+
+class _StatisticsOverview extends StatelessWidget {
+  const _StatisticsOverview({required this.statistics});
+
+  final List<_OverviewStatistic> statistics;
+
+  @override
+  Widget build(BuildContext context) {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Expanded(
+        child: Row(
+          children: statistics
+              .map(
+                (statistic) => Expanded(
                   child: _CompactStatistic(
-                    value: '$incomplete',
-                    label: '未完成',
+                    value: statistic.value,
+                    label: statistic.label,
                   ),
                 ),
-                Expanded(
-                  child: _CompactStatistic(value: '$completed', label: '已完成'),
-                ),
-                Expanded(
-                  child: _CompactStatistic(value: '$total', label: itemLabel),
-                ),
-                Expanded(
-                  child: _CompactStatistic(
-                    value: percentage,
-                    label: '完成率',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 7),
-            Semantics(
-              label: progressLabel,
-              value: total == 0 ? '无数据' : percentage,
-              child: LinearProgressIndicator(
-                value: ratio,
-                minHeight: 5,
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-          ],
+              )
+              .toList(),
         ),
       ),
     );
@@ -1786,26 +1764,6 @@ class StatsFilterDrawer extends StatelessWidget {
       ),
     );
   }
-}
-
-class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value});
-  final String label;
-  final String value;
-  @override
-  Widget build(BuildContext context) => Card(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          value,
-          style: Theme.of(context).textTheme.headlineSmall
-              ?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-      ],
-    ),
-  );
 }
 
 class _Panel extends StatelessWidget {

@@ -94,12 +94,23 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               1 => _planSummary(),
               2 when statCriteria.mode != StatMode.custom => IconButton(
                 tooltip: '回到当前',
-                onPressed: () => setState(
-                  () => statCriteria = statCriteria.copyWith(
-                    anchor: DateTime.now(),
-                  ),
-                ),
-                icon: const Icon(Icons.today_outlined),
+                onPressed: () {
+                  setState(
+                    () => statCriteria = statCriteria.copyWith(
+                      anchor: DateTime.now(),
+                    ),
+                  );
+                  final messenger = ScaffoldMessenger.of(context);
+                  messenger
+                    ..hideCurrentSnackBar()
+                    ..showSnackBar(
+                      const SnackBar(
+                        content: Text('已回到当前统计周期'),
+                        duration: Duration(milliseconds: 1500),
+                      ),
+                    );
+                },
+                icon: const Icon(Icons.restart_alt),
               ),
               _ => null,
             },

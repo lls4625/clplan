@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'app_controller.dart';
 import 'models.dart';
 import 'plan_editor.dart';
+import 'tag_summary.dart';
 import 'task_editor.dart';
 
 class PlanCard extends StatelessWidget {
@@ -37,6 +38,18 @@ class PlanCard extends StatelessWidget {
     final color = node?.color ?? Color(plan.categoryColorValue);
     final managementMode = onAddTask != null || onDelete != null;
     final detailedMode = detailed || managementMode;
+    final tagsByName = {for (final tag in plan.tags) tag.name: tag};
+    final tagItems = orderedSelectedTagNames(
+      selectedNames: plan.tags.map((tag) => tag.name),
+      definitionOrder: controller.tagDefinitions.map((tag) => tag.name),
+    ).map((name) {
+      final tag = tagsByName[name]!;
+      return CardTagItem(
+        name: tag.name,
+        icon: taskTagIcons[tag.iconName] ?? Icons.label_outline,
+        color: Color(tag.colorValue),
+      );
+    }).toList();
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
@@ -123,31 +136,10 @@ class PlanCard extends StatelessWidget {
                     ],
                   ),
                 ),
-              if (detailedMode && plan.tags.isNotEmpty)
+              if (detailedMode && tagItems.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: Wrap(
-                    spacing: 5,
-                    runSpacing: 4,
-                    children: plan.tags.take(4).map((tag) {
-                      final tagColor = Color(tag.colorValue);
-                      return Chip(
-                        avatar: Icon(
-                          taskTagIcons[tag.iconName] ?? Icons.label_outline,
-                          size: 14,
-                          color: tagColor,
-                        ),
-                        label: Text(tag.name),
-                        labelStyle: const TextStyle(fontSize: 12),
-                        labelPadding: const EdgeInsets.symmetric(horizontal: 2),
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        side: BorderSide(color: tagColor),
-                        backgroundColor: tagColor.withAlpha(24),
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      );
-                    }).toList(),
-                  ),
+                  child: CardTagSummary(items: tagItems),
                 ),
               if (detailedMode)
                 Padding(

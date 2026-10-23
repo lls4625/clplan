@@ -414,6 +414,30 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
                 children: [
+                  TextField(
+                    controller: _planController,
+                    textInputAction: TextInputAction.search,
+                    onChanged: (value) => widget.onChanged(
+                      widget.criteria.copyWith(planKeyword: value),
+                    ),
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      labelText: '计划名称',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _taskController,
+                    textInputAction: TextInputAction.search,
+                    onChanged: (value) => widget.onChanged(
+                      widget.criteria.copyWith(taskKeyword: value),
+                    ),
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.task_alt_outlined),
+                      labelText: '任务名称',
+                    ),
+                  ),
+                  const Divider(height: 30),
                   Text('查询日期', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   Row(
@@ -531,30 +555,6 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _planController,
-                    textInputAction: TextInputAction.search,
-                    onChanged: (value) => widget.onChanged(
-                      widget.criteria.copyWith(planKeyword: value),
-                    ),
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
-                      labelText: '计划名称',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _taskController,
-                    textInputAction: TextInputAction.search,
-                    onChanged: (value) => widget.onChanged(
-                      widget.criteria.copyWith(taskKeyword: value),
-                    ),
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.task_alt_outlined),
-                      labelText: '任务名称',
-                    ),
-                  ),
                   const SizedBox(height: 18),
                   Text('标签', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),

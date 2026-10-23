@@ -458,13 +458,13 @@ class SettingsPage extends StatelessWidget {
                 Icon(Icons.table_view_outlined, color: colors.primary),
                 const SizedBox(height: 12),
                 Text(
-                  '${controller.plans.length} 个计划可导出',
+                  '${controller.plans.length} 个计划 · ${controller.contacts.length} 个联系人可导出',
                   style: Theme.of(context).textTheme.titleLarge
                       ?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '导出的文件同时是可再次导入的计划模板，当前计划的主要字段会写入“计划”工作表。',
+                  '计划和联系人分别导出为可再次导入的 XLSX 模板，两类数据互不混合。',
                   style: Theme.of(context).textTheme.bodyMedium
                       ?.copyWith(color: colors.onSurfaceVariant, height: 1.45),
                 ),
@@ -500,9 +500,11 @@ class SettingsPage extends StatelessWidget {
         const SizedBox(height: 18),
         Text('导入与导出', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
+        Text('导出', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
         LayoutBuilder(
           builder: (context, constraints) {
-            final stacked = constraints.maxWidth < 430;
+            final stacked = constraints.maxWidth < 360;
             final width = stacked
                 ? constraints.maxWidth
                 : (constraints.maxWidth - 10) / 2;
@@ -513,22 +515,61 @@ class SettingsPage extends StatelessWidget {
                 SizedBox(
                   width: width,
                   child: FilledButton.icon(
-                    onPressed: () => _export(context),
+                    onPressed: () => _showPlanExport(context),
                     icon: const Icon(Icons.ios_share),
                     label: const Padding(
                       padding: EdgeInsets.symmetric(vertical: 13),
-                      child: Text('导出计划 XLSX'),
+                      child: Text('导出计划数据'),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: width,
+                  child: FilledButton.icon(
+                    onPressed: () => _showContactExport(context),
+                    icon: const Icon(Icons.contacts_outlined),
+                    label: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 13),
+                      child: Text('导出联系人数据'),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 14),
+        Text('导入', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final stacked = constraints.maxWidth < 360;
+            final width = stacked
+                ? constraints.maxWidth
+                : (constraints.maxWidth - 10) / 2;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                SizedBox(
+                  width: width,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _importPlans(context),
+                    icon: const Icon(Icons.file_download_outlined),
+                    label: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 13),
+                      child: Text('导入计划数据'),
                     ),
                   ),
                 ),
                 SizedBox(
                   width: width,
                   child: OutlinedButton.icon(
-                    onPressed: () => _import(context),
-                    icon: const Icon(Icons.file_download_outlined),
+                    onPressed: () => _importContacts(context),
+                    icon: const Icon(Icons.contact_page_outlined),
                     label: const Padding(
                       padding: EdgeInsets.symmetric(vertical: 13),
-                      child: Text('导入计划 XLSX'),
+                      child: Text('导入联系人数据'),
                     ),
                   ),
                 ),
@@ -575,7 +616,13 @@ class SettingsPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '文件上限 10 MB、最多 5000 行；计划 ID 在模板中隐藏并锁定。再次导入时，有 ID 的计划按主键匹配更新，无 ID 的行新增；不会删除本地其他计划。',
+                  '联系人模板独立包含姓名、电话和备注，可用于批量备份、新增或按主键更新联系人。',
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: colors.onSurfaceVariant, height: 1.5),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '单个文件上限 50 MB、最多 10000 行；计划 ID 和联系人 ID 在各自模板中均默认隐藏并锁定。再次导入时，有 ID 的数据按主键匹配更新，无 ID 的行新增；不会删除本地其他数据。',
                   style: Theme.of(context).textTheme.bodySmall
                       ?.copyWith(color: colors.onSurfaceVariant, height: 1.5),
                 ),
@@ -636,21 +683,23 @@ class SettingsPage extends StatelessWidget {
     ],
   );
 
-  Future<void> _export(BuildContext context) async {
-    try {
-      await XlsxService.exportPlans(
-        plans: controller.plans,
-        categories: controller.categoryDefinitions,
-        progressTemplates: controller.progressTemplates,
-        tags: controller.tagDefinitions,
-        contacts: controller.contacts,
+  Future<void> _showPlanExport(BuildContext context) async =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (_) => _PlanExportSheet(controller: controller),
       );
-    } catch (exception) {
-      if (context.mounted) _message(context, '导出失败：$exception');
-    }
-  }
 
-  Future<void> _import(BuildContext context) async {
+  Future<void> _showContactExport(BuildContext context) async =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (_) => _ContactExportSheet(controller: controller),
+      );
+
+  Future<void> _importPlans(BuildContext context) async {
     try {
       final result = await XlsxService.pickAndParse(
         categories: controller.categoryDefinitions,
@@ -664,6 +713,24 @@ class SettingsPage extends StatelessWidget {
         isScrollControlled: true,
         useSafeArea: true,
         builder: (_) => _ImportPreview(controller: controller, result: result),
+      );
+    } catch (exception) {
+      if (context.mounted) _message(context, '导入失败：$exception');
+    }
+  }
+
+  Future<void> _importContacts(BuildContext context) async {
+    try {
+      final result = await XlsxService.pickAndParseContacts();
+      if (result == null || !context.mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (_) => _ContactImportPreview(
+          controller: controller,
+          result: result,
+        ),
       );
     } catch (exception) {
       if (context.mounted) _message(context, '导入失败：$exception');
@@ -2667,4 +2734,840 @@ class _ImportPreviewState extends State<_ImportPreview> {
   };
 
   String _label(String field) => XlsxService.headers[field] ?? field;
+}
+
+class _ContactImportPreview extends StatefulWidget {
+  const _ContactImportPreview({
+    required this.controller,
+    required this.result,
+  });
+
+  final AppController controller;
+  final ContactImportResult result;
+
+  @override
+  State<_ContactImportPreview> createState() =>
+      _ContactImportPreviewState();
+}
+
+class _ContactImportPreviewState extends State<_ContactImportPreview> {
+  bool importing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final incoming = widget.result.contacts;
+    final updates = incoming
+        .where((contact) => widget.controller.contactById(contact.id) != null)
+        .toList();
+    final additions = incoming
+        .where((contact) => widget.controller.contactById(contact.id) == null)
+        .toList();
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: .82,
+      builder: (context, scroll) => Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '联系人导入预览',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              controller: scroll,
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              children: [
+                Text(
+                  '新增 ${additions.length} 项 · 更新 ${updates.length} 项 · 警告 ${widget.result.warnings.length} 条',
+                ),
+                if (widget.result.warnings.isNotEmpty)
+                  Card(
+                    color: Theme.of(context).colorScheme.errorContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(widget.result.warnings.join('\n')),
+                    ),
+                  ),
+                if (additions.isNotEmpty)
+                  ExpansionTile(
+                    title: Text('新增联系人（${additions.length}）'),
+                    children: additions
+                        .map(
+                          (contact) => ListTile(
+                            title: Text(contact.name),
+                            subtitle: Text(contact.phone),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                if (updates.isNotEmpty)
+                  ExpansionTile(
+                    title: Text('更新联系人（${updates.length}）'),
+                    subtitle: const Text('按隐藏的联系人 ID 匹配'),
+                    children: updates
+                        .map(
+                          (contact) => ListTile(
+                            title: Text(contact.name),
+                            subtitle: Text(contact.phone),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                const SizedBox(height: 8),
+                const Text('确认后会新增无主键匹配的行，并用导入值更新主键相同的联系人；不会删除其他联系人。'),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: importing ? null : _confirm,
+                child: Text(importing ? '导入中…' : '确认导入'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirm() async {
+    setState(() => importing = true);
+    try {
+      await widget.controller.importContacts(widget.result.contacts);
+      if (mounted) Navigator.pop(context);
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导入失败：$exception')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => importing = false);
+    }
+  }
+}
+
+enum _ExportScope { all, filtered }
+
+enum _PlanExportCompletion { all, unfinished, completed }
+
+class _PlanExportSheet extends StatefulWidget {
+  const _PlanExportSheet({required this.controller});
+
+  final AppController controller;
+
+  @override
+  State<_PlanExportSheet> createState() => _PlanExportSheetState();
+}
+
+class _PlanExportSheetState extends State<_PlanExportSheet> {
+  late final TextEditingController keywordController;
+  _ExportScope scope = _ExportScope.all;
+  DateTimeRange? dateRange;
+  _PlanExportCompletion completion = _PlanExportCompletion.all;
+  String categoryName = '';
+  String progressTemplateName = '';
+  String progressNodeName = '';
+  final selectedTagNames = <String>{};
+  final selectedContactIds = <String>{};
+  bool exporting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    keywordController = TextEditingController();
+    final now = DateTime.now();
+    dateRange = DateTimeRange(
+      start: DateTime(now.year),
+      end: DateTime(now.year, 12, 31),
+    );
+  }
+
+  @override
+  void dispose() {
+    keywordController.dispose();
+    super.dispose();
+  }
+
+  List<PlanItem> get exportPlans {
+    if (scope == _ExportScope.all) return [...widget.controller.plans];
+    final keyword = keywordController.text.trim().toLowerCase();
+    final start = dateRange == null ? null : _exportDateText(dateRange!.start);
+    final end = dateRange == null ? null : _exportDateText(dateRange!.end);
+    return widget.controller.plans.where((plan) {
+      if (start != null && end != null) {
+        if (plan.startDate.compareTo(end) > 0 ||
+            plan.targetDate.compareTo(start) < 0) {
+          return false;
+        }
+      }
+      if (completion == _PlanExportCompletion.unfinished &&
+          plan.progress.completed) {
+        return false;
+      }
+      if (completion == _PlanExportCompletion.completed &&
+          !plan.progress.completed) {
+        return false;
+      }
+      if (categoryName.isNotEmpty && plan.categoryName != categoryName) {
+        return false;
+      }
+      if (progressTemplateName.isNotEmpty &&
+          plan.progress.templateName != progressTemplateName) {
+        return false;
+      }
+      if (progressNodeName.isNotEmpty &&
+          plan.progress.currentNode?.name != progressNodeName) {
+        return false;
+      }
+      if (keyword.isNotEmpty &&
+          !plan.name.toLowerCase().contains(keyword) &&
+          !plan.description.toLowerCase().contains(keyword)) {
+        return false;
+      }
+      if (selectedTagNames.isNotEmpty &&
+          !plan.tags.any((tag) => selectedTagNames.contains(tag.name))) {
+        return false;
+      }
+      if (selectedContactIds.isNotEmpty &&
+          !plan.contacts.any(
+            (contact) => selectedContactIds.contains(contact.id),
+          )) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = exportPlans;
+    final templates = widget.controller.progressTemplates;
+    final selectedTemplate = _progressTemplateByName(
+      templates,
+      progressTemplateName,
+    );
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: .92,
+      builder: (context, scroll) => Column(
+        children: [
+          _ExportSheetHeader(
+            title: '导出计划数据',
+            onClose: () => Navigator.pop(context),
+          ),
+          Expanded(
+            child: ListView(
+              controller: scroll,
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+              children: [
+                SegmentedButton<_ExportScope>(
+                  segments: const [
+                    ButtonSegment(
+                      value: _ExportScope.all,
+                      label: Text('全量导出'),
+                    ),
+                    ButtonSegment(
+                      value: _ExportScope.filtered,
+                      label: Text('按条件导出'),
+                    ),
+                  ],
+                  selected: {scope},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (selected) => setState(
+                    () => scope = selected.first,
+                  ),
+                ),
+                if (scope == _ExportScope.filtered) ...[
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: keywordController,
+                    textInputAction: TextInputAction.search,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      labelText: '计划关键词',
+                      hintText: '搜索计划名称或内容',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card.outlined(
+                    child: ListTile(
+                      leading: const Icon(Icons.date_range_outlined),
+                      title: const Text('计划日期范围'),
+                      subtitle: Text(
+                        dateRange == null
+                            ? '不限日期'
+                            : '${_exportDateText(dateRange!.start)} 至 ${_exportDateText(dateRange!.end)}\n计划起止区间与该范围有交集即命中',
+                      ),
+                      isThreeLine: dateRange != null,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (dateRange != null)
+                            IconButton(
+                              tooltip: '清除日期',
+                              onPressed: () => setState(() => dateRange = null),
+                              icon: const Icon(Icons.close),
+                            ),
+                          const Icon(Icons.chevron_right),
+                        ],
+                      ),
+                      onTap: _pickDateRange,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<_PlanExportCompletion>(
+                    initialValue: completion,
+                    decoration: const InputDecoration(labelText: '完成状态'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: _PlanExportCompletion.all,
+                        child: Text('全部状态'),
+                      ),
+                      DropdownMenuItem(
+                        value: _PlanExportCompletion.unfinished,
+                        child: Text('未完成'),
+                      ),
+                      DropdownMenuItem(
+                        value: _PlanExportCompletion.completed,
+                        child: Text('已完成'),
+                      ),
+                    ],
+                    onChanged: (value) => setState(
+                      () => completion = value ?? _PlanExportCompletion.all,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('export-category-$categoryName'),
+                    initialValue: categoryName,
+                    decoration: const InputDecoration(labelText: '分类'),
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('全部分类')),
+                      ...widget.controller.categoryDefinitions.map(
+                        (category) => DropdownMenuItem(
+                          value: category.name,
+                          child: Text(category.name),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) => setState(
+                      () => categoryName = value ?? '',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('export-template-$progressTemplateName'),
+                    initialValue: progressTemplateName,
+                    decoration: const InputDecoration(labelText: '进度方案'),
+                    items: [
+                      const DropdownMenuItem(
+                        value: '',
+                        child: Text('全部进度方案'),
+                      ),
+                      ...templates.map(
+                        (template) => DropdownMenuItem(
+                          value: template.name,
+                          child: Text(template.name),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) => setState(() {
+                      progressTemplateName = value ?? '';
+                      progressNodeName = '';
+                    }),
+                  ),
+                  if (selectedTemplate != null) ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      key: ValueKey(
+                        'export-node-$progressTemplateName-$progressNodeName',
+                      ),
+                      initialValue: progressNodeName,
+                      decoration: const InputDecoration(labelText: '进度节点'),
+                      items: [
+                        const DropdownMenuItem(
+                          value: '',
+                          child: Text('该方案全部节点'),
+                        ),
+                        ...selectedTemplate.nodes.map(
+                          (node) => DropdownMenuItem(
+                            value: node.name,
+                            child: Text(node.name),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) => setState(
+                        () => progressNodeName = value ?? '',
+                      ),
+                    ),
+                  ],
+                  if (widget.controller.tagDefinitions.isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    Text('标签（多选内部为“或”）', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: widget.controller.tagDefinitions
+                          .map(
+                            (tag) => FilterChip(
+                              label: Text(tag.name),
+                              selected: selectedTagNames.contains(tag.name),
+                              onSelected: (selected) => setState(
+                                () => selected
+                                    ? selectedTagNames.add(tag.name)
+                                    : selectedTagNames.remove(tag.name),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
+                  if (widget.controller.contacts.isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    Text('联系人（多选内部为“或”）', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: widget.controller.contacts
+                          .map(
+                            (contact) => FilterChip(
+                              label: Text(contact.name),
+                              selected: selectedContactIds.contains(contact.id),
+                              onSelected: (selected) => setState(
+                                () => selected
+                                    ? selectedContactIds.add(contact.id)
+                                    : selectedContactIds.remove(contact.id),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
+                ],
+              ],
+            ),
+          ),
+          _ExportSheetFooter(
+            count: matches.length,
+            exporting: exporting,
+            onExport: matches.isEmpty ? null : () => _export(matches),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickDateRange() async {
+    final now = DateTime.now();
+    final selected = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2200, 12, 31),
+      initialDateRange: dateRange,
+      currentDate: now,
+      helpText: '选择计划导出日期范围',
+    );
+    if (selected != null && mounted) setState(() => dateRange = selected);
+  }
+
+  Future<void> _export(List<PlanItem> plans) async {
+    setState(() => exporting = true);
+    try {
+      await XlsxService.exportPlans(
+        plans: plans,
+        categories: widget.controller.categoryDefinitions,
+        progressTemplates: widget.controller.progressTemplates,
+        tags: widget.controller.tagDefinitions,
+        contacts: widget.controller.contacts,
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (exception) {
+      if (mounted) _showExportError(context, exception);
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+}
+
+class _ContactExportSheet extends StatefulWidget {
+  const _ContactExportSheet({required this.controller});
+
+  final AppController controller;
+
+  @override
+  State<_ContactExportSheet> createState() => _ContactExportSheetState();
+}
+
+class _ContactExportSheetState extends State<_ContactExportSheet> {
+  static const _visibleResultLimit = 50;
+
+  late final TextEditingController keywordController;
+  _ExportScope scope = _ExportScope.all;
+  final selectedContactIds = <String>{};
+  bool exporting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    keywordController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    keywordController.dispose();
+    super.dispose();
+  }
+
+  List<ContactEntry> get exportContacts {
+    if (scope == _ExportScope.all) return [...widget.controller.contacts];
+    if (selectedContactIds.isNotEmpty) {
+      return widget.controller.contacts
+          .where((contact) => selectedContactIds.contains(contact.id))
+          .toList();
+    }
+    final keyword = keywordController.text.trim().toLowerCase();
+    return widget.controller.contacts.where((contact) {
+      if (keyword.isNotEmpty &&
+          !contact.name.toLowerCase().contains(keyword) &&
+          !contact.phone.toLowerCase().contains(keyword) &&
+          !contact.remark.toLowerCase().contains(keyword)) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  List<ContactEntry> get queriedContacts {
+    final keyword = keywordController.text.trim().toLowerCase();
+    if (keyword.isEmpty) return const [];
+    return widget.controller.contacts.where((contact) {
+      return contact.name.toLowerCase().contains(keyword) ||
+          contact.phone.toLowerCase().contains(keyword) ||
+          contact.remark.toLowerCase().contains(keyword);
+    }).toList();
+  }
+
+  List<ContactEntry> get selectedContacts => widget.controller.contacts
+      .where((contact) => selectedContactIds.contains(contact.id))
+      .toList();
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = exportContacts;
+    final keyword = keywordController.text.trim();
+    final queryMatches = queriedContacts;
+    final visibleMatches = queryMatches
+        .take(_visibleResultLimit)
+        .toList(growable: false);
+    final selected = selectedContacts;
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: .84,
+      builder: (context, scroll) => Column(
+        children: [
+          _ExportSheetHeader(
+            title: '导出联系人数据',
+            onClose: () => Navigator.pop(context),
+          ),
+          Expanded(
+            child: ListView(
+              controller: scroll,
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+              children: [
+                SegmentedButton<_ExportScope>(
+                  segments: const [
+                    ButtonSegment(
+                      value: _ExportScope.all,
+                      label: Text('全量导出'),
+                    ),
+                    ButtonSegment(
+                      value: _ExportScope.filtered,
+                      label: Text('按条件导出'),
+                    ),
+                  ],
+                  selected: {scope},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (selected) => setState(
+                    () => scope = selected.first,
+                  ),
+                ),
+                if (scope == _ExportScope.filtered) ...[
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: keywordController,
+                    textInputAction: TextInputAction.search,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search),
+                      labelText: '查询联系人',
+                      hintText: '输入姓名、电话或备注',
+                      suffixIcon: keyword.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: '清除查询',
+                              onPressed: () {
+                                keywordController.clear();
+                                setState(() {});
+                              },
+                              icon: const Icon(Icons.close),
+                            ),
+                    ),
+                  ),
+                  if (selected.isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '已选联系人（${selected.length}）',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => setState(selectedContactIds.clear),
+                          child: const Text('清空'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 40,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: selected.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) {
+                          final contact = selected[index];
+                          return InputChip(
+                            label: Text(contact.name),
+                            onDeleted: () => setState(
+                              () => selectedContactIds.remove(contact.id),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                  Text(
+                    '查询结果',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  if (keyword.isEmpty)
+                    const _ContactExportQueryHint(
+                      icon: Icons.manage_search,
+                      text: '输入查询条件后显示联系人，不会直接展示全部人员。',
+                    )
+                  else if (queryMatches.isEmpty)
+                    const _ContactExportQueryHint(
+                      icon: Icons.person_search_outlined,
+                      text: '没有找到符合条件的联系人。',
+                    )
+                  else ...[
+                    Text(
+                      queryMatches.length > _visibleResultLimit
+                          ? '找到 ${queryMatches.length} 人，仅显示前 $_visibleResultLimit 人，请继续输入以缩小范围。'
+                          : '找到 ${queryMatches.length} 人，可勾选一个或多个联系人。',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Card.outlined(
+                      margin: EdgeInsets.zero,
+                      clipBehavior: Clip.antiAlias,
+                      child: SizedBox(
+                        height: (visibleMatches.length * 64.0)
+                            .clamp(64.0, 280.0)
+                            .toDouble(),
+                        child: ListView.separated(
+                          primary: false,
+                          itemCount: visibleMatches.length,
+                          separatorBuilder: (_, _) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final contact = visibleMatches[index];
+                            final isSelected = selectedContactIds.contains(
+                              contact.id,
+                            );
+                            return CheckboxListTile(
+                              value: isSelected,
+                              dense: true,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              title: Text(contact.name),
+                              subtitle: _contactSearchSubtitle(contact),
+                              onChanged: (checked) => setState(() {
+                                if (checked ?? false) {
+                                  selectedContactIds.add(contact.id);
+                                } else {
+                                  selectedContactIds.remove(contact.id);
+                                }
+                              }),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Text(
+                    selectedContactIds.isEmpty
+                        ? '未指定联系人时，将导出全部关键词命中项。'
+                        : '已指定联系人时，将仅导出已选的 ${selectedContactIds.length} 人。',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          _ExportSheetFooter(
+            count: matches.length,
+            exporting: exporting,
+            onExport: matches.isEmpty ? null : () => _export(matches),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _contactSearchSubtitle(ContactEntry contact) {
+    final details = [
+      if (contact.phone.trim().isNotEmpty) contact.phone.trim(),
+      if (contact.remark.trim().isNotEmpty) contact.remark.trim(),
+    ];
+    return details.isEmpty ? null : Text(details.join(' · '));
+  }
+
+  Future<void> _export(List<ContactEntry> contacts) async {
+    setState(() => exporting = true);
+    try {
+      await XlsxService.exportContacts(contacts: contacts);
+      if (mounted) Navigator.pop(context);
+    } catch (exception) {
+      if (mounted) _showExportError(context, exception);
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+}
+
+class _ContactExportQueryHint extends StatelessWidget {
+  const _ContactExportQueryHint({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Card.outlined(
+    margin: EdgeInsets.zero,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Icon(icon, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          const SizedBox(width: 12),
+          Expanded(child: Text(text)),
+        ],
+      ),
+    ),
+  );
+}
+
+class _ExportSheetHeader extends StatelessWidget {
+  const _ExportSheetHeader({required this.title, required this.onClose});
+
+  final String title;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(18),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(title, style: Theme.of(context).textTheme.headlineSmall),
+        ),
+        IconButton(onPressed: onClose, icon: const Icon(Icons.close)),
+      ],
+    ),
+  );
+}
+
+class _ExportSheetFooter extends StatelessWidget {
+  const _ExportSheetFooter({
+    required this.count,
+    required this.exporting,
+    required this.onExport,
+  });
+
+  final int count;
+  final bool exporting;
+  final VoidCallback? onExport;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(18),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '将导出 $count 条数据',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed: exporting ? null : onExport,
+          icon: const Icon(Icons.ios_share),
+          label: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 13),
+            child: Text(exporting ? '导出中…' : '确认导出'),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+String _exportDateText(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-'
+    '${date.month.toString().padLeft(2, '0')}-'
+    '${date.day.toString().padLeft(2, '0')}';
+
+ProgressTemplate? _progressTemplateByName(
+  List<ProgressTemplate> templates,
+  String name,
+) {
+  for (final template in templates) {
+    if (template.name == name) return template;
+  }
+  return null;
+}
+
+void _showExportError(BuildContext context, Object exception) {
+  final message = exception.toString().replaceFirst('Bad state: ', '');
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text('导出失败：$message')));
 }

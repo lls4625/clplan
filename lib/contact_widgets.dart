@@ -2,6 +2,62 @@ import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
 import 'models.dart';
+import 'work_form_widgets.dart';
+
+class ContactFormSection extends StatelessWidget {
+  const ContactFormSection({
+    super.key,
+    required this.controller,
+    required this.selectedContacts,
+    required this.onChanged,
+    this.readOnly = false,
+    this.preserveSnapshots = false,
+  });
+
+  final AppController controller;
+  final List<ContactEntry> selectedContacts;
+  final ValueChanged<List<ContactEntry>> onChanged;
+  final bool readOnly;
+  final bool preserveSnapshots;
+
+  @override
+  Widget build(BuildContext context) {
+    return WorkFormSection(
+      title: '联系人',
+      icon: Icons.people_outline,
+      subtitle: selectedContacts.isEmpty
+          ? '未选择'
+          : '${selectedContacts.length} 人',
+      trailing: readOnly
+          ? null
+          : IconButton(
+              tooltip: '选择或新增联系人',
+              onPressed: () => _pickContact(context),
+              icon: const Icon(Icons.person_add_alt_1_outlined),
+            ),
+      children: [
+        ContactSelectionField(
+          controller: controller,
+          selectedContacts: selectedContacts,
+          readOnly: readOnly,
+          preserveSnapshots: preserveSnapshots,
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickContact(BuildContext context) async {
+    final selected = await showContactPicker(
+      context,
+      controller,
+      selectedContacts,
+    );
+    if (selected == null || !context.mounted) return;
+    if (selectedContacts.any((item) => item.id == selected.id)) return;
+    onChanged([...selectedContacts, selected]);
+  }
+}
 
 class ContactSelectionField extends StatelessWidget {
   const ContactSelectionField({
@@ -77,22 +133,13 @@ class ContactSelectionField extends StatelessWidget {
                           ],
                         ],
                       ),
-                      _ContactValue(label: '电话', value: contact.phone),
-                      const SizedBox(height: 10),
-                      _ContactValue(label: '备注', value: contact.remark),
+                      _ContactContent(value: contact.phone),
+                      const SizedBox(height: 6),
+                      _ContactContent(value: contact.remark, softWrap: true),
                     ],
                   ),
                 ),
               ),
-            ),
-          ),
-        if (!readOnly)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () => _pickContact(context),
-              icon: const Icon(Icons.person_add_alt_1_outlined),
-              label: const Text('选择或新增联系人'),
             ),
           ),
       ],
@@ -113,17 +160,6 @@ class ContactSelectionField extends StatelessWidget {
     );
   }
 
-  Future<void> _pickContact(BuildContext context) async {
-    final selected = await showContactPicker(
-      context,
-      controller,
-      selectedContacts,
-    );
-    if (selected == null || !context.mounted) return;
-    if (selectedContacts.any((item) => item.id == selected.id)) return;
-    onChanged([...selectedContacts, selected]);
-  }
-
   ContactEntry? _configuredContact(ContactEntry snapshot) {
     for (final contact in controller.contacts) {
       if (contact.id == snapshot.id) return contact;
@@ -132,29 +168,18 @@ class ContactSelectionField extends StatelessWidget {
   }
 }
 
-class _ContactValue extends StatelessWidget {
-  const _ContactValue({required this.label, required this.value});
+class _ContactContent extends StatelessWidget {
+  const _ContactContent({required this.value, this.softWrap});
 
-  final String label;
   final String value;
+  final bool? softWrap;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelMedium
-              ?.copyWith(color: colors.onSurfaceVariant),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          value.trim().isEmpty ? '未填写' : value,
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.4),
-        ),
-      ],
+    return Text(
+      value.trim().isEmpty ? '未填写' : value,
+      softWrap: softWrap,
+      style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.4),
     );
   }
 }

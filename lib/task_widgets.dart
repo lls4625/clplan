@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import 'app_controller.dart';
 import 'models.dart';
+import 'tag_summary.dart';
 
 class TaskCard extends StatelessWidget {
   const TaskCard({
@@ -70,6 +71,25 @@ class TaskCard extends StatelessWidget {
               )
               .where((value) => value.isNotEmpty)
               .join('、');
+    final snapshotsByName = {
+      for (final snapshot in task.tagSnapshots) snapshot.name: snapshot,
+    };
+    final tagItems = orderedSelectedTagNames(
+      selectedNames: task.tags,
+      definitionOrder: controller.tagDefinitions.map((tag) => tag.name),
+    ).map((name) {
+      final snapshot = snapshotsByName[name];
+      final definition = controller.tagDefinitionForName(name);
+      return CardTagItem(
+        name: name,
+        icon: snapshot == null
+            ? definition?.icon ?? Icons.history
+            : taskTagIcons[snapshot.iconName] ?? Icons.history,
+        color: snapshot == null
+            ? definition?.color
+            : Color(snapshot.colorValue),
+      );
+    }).toList();
     return Padding(
       padding: EdgeInsets.only(left: nested ? 20 : 0, bottom: 8),
       child: Card(
@@ -162,37 +182,10 @@ class TaskCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                if (task.tags.isNotEmpty)
+                if (tagItems.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Wrap(
-                      spacing: 5,
-                      runSpacing: 4,
-                      children: task.tags.take(4).map((tag) {
-                        TaskTagSnapshot? snapshot;
-                        for (final item in task.tagSnapshots) {
-                          if (item.name == tag) snapshot = item;
-                        }
-                        final definition = controller.tagDefinitionForName(tag);
-                        final color = snapshot == null
-                            ? definition?.color
-                            : Color(snapshot.colorValue);
-                        final icon = snapshot == null
-                            ? definition?.icon
-                            : taskTagIcons[snapshot.iconName];
-                        return Chip(
-                          avatar: Icon(
-                            icon ?? Icons.history,
-                            size: 16,
-                            color: color,
-                          ),
-                          label: Text(tag),
-                          side: color == null ? null : BorderSide(color: color),
-                          backgroundColor: color?.withAlpha(24),
-                          visualDensity: VisualDensity.compact,
-                        );
-                      }).toList(),
-                    ),
+                    child: CardTagSummary(items: tagItems),
                   ),
                 Padding(
                   padding: const EdgeInsets.only(top: 8),

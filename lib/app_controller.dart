@@ -150,6 +150,14 @@ class AppController extends ChangeNotifier {
     return null;
   }
 
+  ContactEntry? contactById(String? id) {
+    if (id == null) return null;
+    for (final contact in contacts) {
+      if (contact.id == id) return contact;
+    }
+    return null;
+  }
+
   int compareTasks(TaskItem a, TaskItem b) {
     final dateCompare = (a.startDate.isEmpty ? '9999' : a.startDate).compareTo(
       b.startDate.isEmpty ? '9999' : b.startDate,
@@ -902,5 +910,41 @@ class AppController extends ChangeNotifier {
     }
     await reload();
     await _reconcileReminders();
+  }
+
+  Future<void> importContacts(List<ContactEntry> imported) async {
+    final importedIds = imported.map((contact) => contact.id).toSet();
+    if (importedIds.length != imported.length) {
+      throw StateError('导入文件中存在重复的联系人 ID。');
+    }
+    final usedIdentities = <String>{
+      for (final contact in contacts)
+        if (!importedIds.contains(contact.id))
+          '${contact.name.trim().toLowerCase()}\u0000${contact.phone.trim()}',
+    };
+    for (final contact in imported) {
+      final name = contact.name.trim();
+      final phone = contact.phone.trim();
+      final remark = contact.remark.trim();
+      if (name.isEmpty) throw StateError('导入的联系人姓名不能为空。');
+      if (remark.characters.length > maxContactRemarkLength) {
+        throw StateError('联系人“$name”备注最多 $maxContactRemarkLength 个字符。');
+      }
+      final identity = '${name.toLowerCase()}\u0000$phone';
+      if (!usedIdentities.add(identity)) {
+        throw StateError('联系人“$name”与现有的姓名和电话重复。');
+      }
+    }
+    for (final contact in imported) {
+      await db.saveContact(
+        ContactEntry(
+          id: contact.id,
+          name: contact.name.trim(),
+          phone: contact.phone.trim(),
+          remark: contact.remark.trim(),
+        ),
+      );
+    }
+    await reload();
   }
 }
