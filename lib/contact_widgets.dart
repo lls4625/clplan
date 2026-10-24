@@ -35,15 +35,17 @@ class ContactFormSection extends StatelessWidget {
               onPressed: () => _pickContact(context),
               icon: const Icon(Icons.person_add_alt_1_outlined),
             ),
-      children: [
-        ContactSelectionField(
-          controller: controller,
-          selectedContacts: selectedContacts,
-          readOnly: readOnly,
-          preserveSnapshots: preserveSnapshots,
-          onChanged: onChanged,
-        ),
-      ],
+      children: selectedContacts.isEmpty
+          ? const []
+          : [
+              ContactSelectionField(
+                controller: controller,
+                selectedContacts: selectedContacts,
+                readOnly: readOnly,
+                preserveSnapshots: preserveSnapshots,
+                onChanged: onChanged,
+              ),
+            ],
     );
   }
 
@@ -81,67 +83,60 @@ class ContactSelectionField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (selectedContacts.isEmpty)
-          Text(
-            '暂无联系人',
-            style: Theme.of(context).textTheme.bodyMedium
-                ?.copyWith(color: colors.onSurfaceVariant),
-          )
-        else
-          ...selectedContacts.map(
-            (contact) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: colors.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 8, 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              contact.name,
-                              style: Theme.of(context).textTheme.titleSmall
-                                  ?.copyWith(fontWeight: FontWeight.w700),
+        ...selectedContacts.map(
+          (contact) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 8, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            contact.name,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        if (!readOnly) ...[
+                          IconButton(
+                            tooltip: '编辑联系人配置',
+                            onPressed: _configuredContact(contact) == null
+                                ? null
+                                : () => _editContact(context, contact),
+                            icon: const Icon(Icons.edit_outlined, size: 19),
+                          ),
+                          IconButton(
+                            tooltip: '取消选择',
+                            onPressed: () => onChanged(
+                              selectedContacts
+                                  .where((item) => item.id != contact.id)
+                                  .toList(),
+                            ),
+                            icon: const Icon(
+                              Icons.remove_circle_outline,
+                              size: 19,
                             ),
                           ),
-                          if (!readOnly) ...[
-                            IconButton(
-                              tooltip: '编辑联系人配置',
-                              onPressed: _configuredContact(contact) == null
-                                  ? null
-                                  : () => _editContact(context, contact),
-                              icon: const Icon(Icons.edit_outlined, size: 19),
-                            ),
-                            IconButton(
-                              tooltip: '取消选择',
-                              onPressed: () => onChanged(
-                                selectedContacts
-                                    .where((item) => item.id != contact.id)
-                                    .toList(),
-                              ),
-                              icon: const Icon(
-                                Icons.remove_circle_outline,
-                                size: 19,
-                              ),
-                            ),
-                          ],
                         ],
-                      ),
-                      _ContactContent(value: contact.phone),
-                      const SizedBox(height: 6),
-                      _ContactContent(value: contact.remark, softWrap: true),
-                    ],
-                  ),
+                      ],
+                    ),
+                    _ContactContent(value: contact.phone),
+                    const SizedBox(height: 6),
+                    _ContactContent(value: contact.remark, softWrap: true),
+                  ],
                 ),
               ),
             ),
           ),
+        ),
       ],
     );
   }

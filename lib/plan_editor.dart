@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'app_controller.dart';
 import 'contact_widgets.dart';
 import 'models.dart';
+import 'reminder_form_widgets.dart';
 import 'task_editor.dart';
 import 'task_widgets.dart';
 import 'work_form_widgets.dart';
@@ -215,21 +216,17 @@ class _PlanEditorState extends State<PlanEditor> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    WorkFormSection(
-                      title: '通知与闹铃',
-                      icon: Icons.notifications_active_outlined,
-                      subtitle: reminders.isEmpty
-                          ? '可设置多个通知或闹铃'
-                          : '${reminders.length} 个提醒',
-                      trailing: Semantics(
-                        label: '启用通知与闹铃',
-                        child: Switch.adaptive(
-                          value: reminderEnabled,
-                          onChanged: (value) =>
-                              setState(() => reminderEnabled = value),
-                        ),
-                      ),
-                      children: [_buildReminderCard(context)],
+                    ReminderFormSection(
+                      controller: widget.controller,
+                      reminders: reminders,
+                      enabled: reminderEnabled,
+                      onEnabledChanged: (value) =>
+                          setState(() => reminderEnabled = value),
+                      onAdd: _addPlanReminder,
+                      onRemove: (rule) => setState(() {
+                        reminders.remove(rule);
+                        if (reminders.isEmpty) reminderEnabled = false;
+                      }),
                     ),
                     const SizedBox(height: 16),
                     ContactFormSection(
@@ -340,7 +337,9 @@ class _PlanEditorState extends State<PlanEditor> {
                             scaffoldKey.currentState?.openEndDrawer(),
                         icon: const Icon(Icons.edit_outlined),
                       ),
-                      children: [_buildTags(context)],
+                      children: selectedTags.isEmpty
+                          ? const []
+                          : [_buildTags(context)],
                     ),
                     if (plan != null) ...[
                       const SizedBox(height: 16),
@@ -353,14 +352,8 @@ class _PlanEditorState extends State<PlanEditor> {
                           onPressed: () => _addTask(plan),
                           icon: const Icon(Icons.add),
                         ),
-                        children: [
-                          if (tasks.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 18),
-                              child: Center(child: Text('该计划还没有任务')),
-                            )
-                          else
-                            ...tasks.map(
+                        children: tasks
+                            .map(
                               (task) => TaskCard(
                                 task: task,
                                 controller: widget.controller,
@@ -370,8 +363,8 @@ class _PlanEditorState extends State<PlanEditor> {
                                     ? () => _addSubtask(task)
                                     : null,
                               ),
-                            ),
-                        ],
+                            )
+                            .toList(),
                       ),
                     ],
                   ],
@@ -513,113 +506,20 @@ class _PlanEditorState extends State<PlanEditor> {
     setState(() => calendarDisplayMode = selected);
   }
 
-  Widget _buildReminderCard(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      if (reminderEnabled || reminders.isNotEmpty) ...[
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: reminderEnabled
-                    ? () => _addPlanReminder(ReminderDeliveryType.notification)
-                    : null,
-                icon: const Icon(Icons.notifications_none),
-                label: const Text('通知提醒'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: reminderEnabled
-                    ? () => _addPlanReminder(ReminderDeliveryType.alarm)
-                    : null,
-                icon: const Icon(Icons.alarm_outlined),
-                label: const Text('闹铃提醒'),
-              ),
-            ),
-          ],
-        ),
-        if (reminders.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          ...reminders.map(
-            (rule) => ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                rule.deliveryType == ReminderDeliveryType.alarm
-                    ? Icons.alarm_outlined
-                    : Icons.notifications_none,
-              ),
-              title: Text('${rule.deliveryLabel} · ${rule.label}'),
-              subtitle:
-                  rule.absoluteAt != null &&
-                      rule.absoluteAt!.isBefore(DateTime.now())
-                  ? const Text('已过期，不会再提醒')
-                  : null,
-              trailing: IconButton(
-                tooltip: '删除提醒',
-                onPressed: () => setState(() {
-                  reminders.remove(rule);
-                  if (reminders.isEmpty) reminderEnabled = false;
-                }),
-                icon: const Icon(Icons.close),
-              ),
-            ),
-          ),
-        ],
-        if (reminders.any(
-          (item) => item.deliveryType == ReminderDeliveryType.alarm,
-        ))
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text(
-              widget.controller.alarmPermission ==
-                      AlarmPermissionState.unsupported
-                  ? '当前系统不支持 AlarmKit；闹铃规则会保留。'
-                  : '闹铃需要 iOS 26 或更高版本及独立授权。',
-              style: const TextStyle(fontSize: 12),
-            ),
-          ),
-      ],
-    ],
-  );
-
   Future<void> _addPlanReminder(ReminderDeliveryType deliveryType) async {
-    final now = DateTime.now();
-    final start = dateFromText(startDate);
-    final initial = start.isAfter(now) ? start : now;
-    final date = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime(now.year, now.month, now.day),
-      lastDate: DateTime(2200),
-      helpText: deliveryType == ReminderDeliveryType.alarm
-          ? '选择闹铃日期'
-          : '选择通知日期',
+    final absolute = await showReminderDateTimePicker(
+      context,
+      deliveryType,
+      initialDate: dateFromText(startDate),
     );
-    if (!mounted || date == null) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: const TimeOfDay(hour: 9, minute: 0),
-      helpText: deliveryType == ReminderDeliveryType.alarm
-          ? '选择闹铃时间'
-          : '选择通知时间',
-    );
-    if (!mounted || time == null) return;
-    final absolute = DateTime(
-      date.year,
-      date.month,
-      date.day,
-      time.hour,
-      time.minute,
-    );
-    if (!absolute.isAfter(now)) {
+    if (!mounted || absolute == null) return;
+    if (!absolute.isAfter(DateTime.now())) {
       _message('提醒时间必须晚于当前时间。');
       return;
     }
     if (reminders.any(
       (item) =>
+          item.type == ReminderRuleType.absolute &&
           item.deliveryType == deliveryType &&
           item.absoluteAt?.isAtSameMomentAs(absolute) == true,
     )) {
@@ -635,11 +535,6 @@ class _PlanEditorState extends State<PlanEditor> {
           absoluteAt: absolute,
           sortOrder: reminders.length,
           deliveryType: deliveryType,
-        ),
-      );
-      reminders.sort(
-        (a, b) => (a.absoluteAt ?? DateTime(2200)).compareTo(
-          b.absoluteAt ?? DateTime(2200),
         ),
       );
       reminderEnabled = true;
@@ -659,34 +554,21 @@ class _PlanEditorState extends State<PlanEditor> {
           .map((tag) => tag.name),
       ...historical,
     ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (labels.isEmpty)
-          Text(
-            '暂无标签',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          )
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: labels.map((name) {
-              final definition = widget.controller.tagDefinitionForName(name);
-              return InputChip(
-                avatar: Icon(
-                  definition?.icon ?? Icons.label_outline,
-                  size: 18,
-                  color: definition?.color,
-                ),
-                label: Text(name),
-                onDeleted: () => setState(() => selectedTags.remove(name)),
-              );
-            }).toList(),
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: labels.map((name) {
+        final definition = widget.controller.tagDefinitionForName(name);
+        return InputChip(
+          avatar: Icon(
+            definition?.icon ?? Icons.label_outline,
+            size: 18,
+            color: definition?.color,
           ),
-      ],
+          label: Text(name),
+          onDeleted: () => setState(() => selectedTags.remove(name)),
+        );
+      }).toList(),
     );
   }
 

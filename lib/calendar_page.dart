@@ -1518,6 +1518,14 @@ class _CalendarWeekRow extends StatelessWidget {
                         color: completed
                             ? colorScheme.onSurfaceVariant.withAlpha(20)
                             : color.withAlpha(30),
+                        border: completed
+                            ? Border.all(
+                                color: colorScheme.onSurfaceVariant.withAlpha(
+                                  120,
+                                ),
+                                width: .8,
+                              )
+                            : null,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: _CalendarPlanLabel(

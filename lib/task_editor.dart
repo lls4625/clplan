@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'app_controller.dart';
 import 'contact_widgets.dart';
 import 'models.dart';
-import 'notification_service.dart';
+import 'reminder_form_widgets.dart';
 import 'task_widgets.dart';
 import 'work_form_widgets.dart';
 
@@ -116,12 +116,8 @@ class _TaskEditorState extends State<TaskEditor> {
         startTime.isNotEmpty &&
         widget.controller.preferences.defaultReminderMinutes >= 0) {
       reminders.add(
-        TaskReminderRule(
-          id: 'reminder-${DateTime.now().microsecondsSinceEpoch}',
-          taskId: 'draft',
-          type: ReminderRuleType.relativeDuration,
-          offsetMinutes: widget.controller.preferences.defaultReminderMinutes,
-          sortOrder: 0,
+        _relativeReminder(
+          widget.controller.preferences.defaultReminderMinutes,
         ),
       );
     }
@@ -475,21 +471,8 @@ class _TaskEditorState extends State<TaskEditor> {
                     ),
                     const SizedBox(height: 16),
                     WorkFormSection(
-                      title: '时间与提醒',
+                      title: '时间与日历',
                       icon: Icons.calendar_month_outlined,
-                      subtitle: reminders.isEmpty
-                          ? '未设置提醒'
-                          : '${reminders.length} 个提醒',
-                      trailing: Semantics(
-                        label: '启用通知与闹铃',
-                        child: Switch.adaptive(
-                          value: reminderEnabled,
-                          onChanged: readOnly
-                              ? null
-                              : (value) =>
-                                    setState(() => reminderEnabled = value),
-                        ),
-                      ),
                       children: [
                         ResponsiveFieldPair(
                           first: WorkValueField(
@@ -518,8 +501,25 @@ class _TaskEditorState extends State<TaskEditor> {
                               label: const Text('清除日期和时间'),
                             ),
                           ),
-                        _buildReminderCard(context),
                       ],
+                    ),
+                    const SizedBox(height: 16),
+                    ReminderFormSection(
+                      controller: widget.controller,
+                      reminders: reminders,
+                      enabled: reminderEnabled,
+                      readOnly: readOnly,
+                      onEnabledChanged: (value) =>
+                          setState(() => reminderEnabled = value),
+                      onAdd: _addReminder,
+                      onRemove: (rule) => setState(() {
+                        reminders.remove(rule);
+                        if (reminders.isEmpty) reminderEnabled = false;
+                      }),
+                      resolveFireAt: (rule) => rule.fireDateFor(
+                        startDate: startDate,
+                        startTime: startTime,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     ContactFormSection(
@@ -655,7 +655,9 @@ class _TaskEditorState extends State<TaskEditor> {
                                   scaffoldKey.currentState?.openEndDrawer(),
                               icon: const Icon(Icons.edit_outlined),
                             ),
-                      children: [_buildTags(context)],
+                      children: selectedTags.isEmpty
+                          ? const []
+                          : [_buildTags(context)],
                     ),
                     const SizedBox(height: 16),
                     WorkFormSection(
@@ -684,16 +686,13 @@ class _TaskEditorState extends State<TaskEditor> {
                         icon: Icons.forum_outlined,
                         subtitle: '${widget.task!.followups.length} 条',
                         children: [
-                          if (widget.task!.followups.isEmpty)
-                            const Text('还没有跟进记录')
-                          else
-                            ...widget.task!.followups.map(
-                              (item) => WorkActivityItem(
-                                text: item.text,
-                                time: DateFormat('yyyy-MM-dd HH:mm')
-                                    .format(item.at.toLocal()),
-                              ),
+                          ...widget.task!.followups.map(
+                            (item) => WorkActivityItem(
+                              text: item.text,
+                              time: DateFormat('yyyy-MM-dd HH:mm')
+                                  .format(item.at.toLocal()),
                             ),
+                          ),
                           if (!readOnly)
                             TextFormField(
                               controller: followup,
@@ -747,421 +746,22 @@ class _TaskEditorState extends State<TaskEditor> {
     );
   }
 
-  Widget _buildReminderCard(BuildContext context) {
-    final hasTaskTime = startDate.isNotEmpty && startTime.isNotEmpty;
-    final permissionDisabled =
-        widget.controller.reminderPermission ==
-        ReminderPermissionState.disabled;
-    final hasNotificationReminders = reminders.any(
-      (item) => item.deliveryType == ReminderDeliveryType.notification,
+  Future<void> _addReminder(ReminderDeliveryType deliveryType) async {
+    final absolute = await showReminderDateTimePicker(
+      context,
+      deliveryType,
+      initialDate: startDate.isEmpty ? null : dateFromText(startDate),
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (reminderEnabled || reminders.isNotEmpty) ...[
-          if (!hasTaskTime)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 10),
-              child: Text(
-                '设置任务日期和时间后可使用快捷提醒；也可添加一个独立的指定时间。',
-                style: TextStyle(fontSize: 12),
-              ),
-            ),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children:
-                const [
-                  (0, '准时'),
-                  (5, '5 分钟前'),
-                  (30, '30 分钟前'),
-                  (60, '1 小时前'),
-                  (1440, '1 天前'),
-                ].map((entry) {
-                  return FilterChip(
-                    label: Text(entry.$2),
-                    selected: reminders.any(
-                      (item) =>
-                          item.type == ReminderRuleType.relativeDuration &&
-                          item.offsetMinutes == entry.$1 &&
-                          item.deliveryType ==
-                              ReminderDeliveryType.notification,
-                    ),
-                    onSelected: readOnly || !reminderEnabled || !hasTaskTime
-                        ? null
-                        : (_) => _toggleQuickReminder(entry.$1),
-                  );
-                }).toList(),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: readOnly || !reminderEnabled
-                      ? null
-                      : () => _showAddReminder(
-                          context,
-                          ReminderDeliveryType.notification,
-                        ),
-                  icon: const Icon(Icons.notifications_none),
-                  label: const Text('通知提醒'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: readOnly || !reminderEnabled
-                      ? null
-                      : () => _showAddReminder(
-                          context,
-                          ReminderDeliveryType.alarm,
-                        ),
-                  icon: const Icon(Icons.alarm_outlined),
-                  label: const Text('闹铃提醒'),
-                ),
-              ),
-            ],
-          ),
-          if (reminders.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            ...reminders.map((rule) {
-              final fireAt = rule.fireDateFor(
-                startDate: startDate,
-                startTime: startTime,
-              );
-              final expired = fireAt != null && fireAt.isBefore(DateTime.now());
-              return ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  rule.deliveryType == ReminderDeliveryType.alarm
-                      ? Icons.alarm_outlined
-                      : Icons.notifications_none,
-                ),
-                title: Text('${rule.deliveryLabel} · ${rule.label}'),
-                subtitle: fireAt == null
-                    ? const Text('等待任务时间')
-                    : Text(
-                        expired
-                            ? '已过期，不会再提醒'
-                            : DateFormat('yyyy-MM-dd HH:mm').format(fireAt),
-                      ),
-                trailing: readOnly
-                    ? null
-                    : IconButton(
-                        tooltip: '删除提醒',
-                        onPressed: () => setState(() {
-                          reminders.remove(rule);
-                          if (reminders.isEmpty) reminderEnabled = false;
-                        }),
-                        icon: const Icon(Icons.close),
-                      ),
-              );
-            }),
-          ],
-          if (permissionDisabled && hasNotificationReminders)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      '提醒会保存，但需在系统设置中允许通知后才会生效。',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: widget.controller.openReminderSettings,
-                    child: const Text('去设置'),
-                  ),
-                ],
-              ),
-            ),
-          if (reminders.any(
-            (item) => item.deliveryType == ReminderDeliveryType.alarm,
-          ))
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                widget.controller.alarmPermission ==
-                        AlarmPermissionState.unsupported
-                    ? '当前系统不支持闹铃提醒；规则会保留，但不会生效。'
-                    : widget.controller.alarmPermission ==
-                          AlarmPermissionState.denied
-                    ? '闹铃权限未开启；规则会保留，但不会生效。'
-                    : '闹铃提醒需要 iOS 26 或更高版本及独立授权。',
-                style: const TextStyle(fontSize: 12),
-              ),
-            ),
-        ],
-      ],
-    );
-  }
-
-  void _toggleQuickReminder(int minutes) {
-    setState(() {
-      final existing = reminders.where(
-        (item) =>
-            item.type == ReminderRuleType.relativeDuration &&
-            item.offsetMinutes == minutes &&
-            item.deliveryType == ReminderDeliveryType.notification,
-      );
-      if (existing.isNotEmpty) {
-        reminders.remove(existing.first);
-      } else {
-        reminders.add(_relativeReminder(minutes));
-      }
-      reminderEnabled = reminders.isNotEmpty;
-    });
-  }
-
-  TaskReminderRule _relativeReminder(
-    int minutes, {
-    ReminderDeliveryType deliveryType = ReminderDeliveryType.notification,
-  }) => TaskReminderRule(
-    id: 'reminder-${DateTime.now().microsecondsSinceEpoch}-$minutes',
-    taskId: widget.task?.id ?? 'draft',
-    type: ReminderRuleType.relativeDuration,
-    offsetMinutes: minutes,
-    sortOrder: reminders.length,
-    deliveryType: deliveryType,
-  );
-
-  Future<void> _showAddReminder(
-    BuildContext context,
-    ReminderDeliveryType deliveryType,
-  ) async {
-    final type = await showModalBottomSheet<ReminderRuleType>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(
-                '添加${deliveryType == ReminderDeliveryType.alarm ? '闹铃' : '通知'}提醒',
-              ),
-              subtitle: const Text('每条提醒可以选择独立的送达方式'),
-            ),
-            ListTile(
-              enabled: startDate.isNotEmpty && startTime.isNotEmpty,
-              leading: const Icon(Icons.timelapse),
-              title: const Text('提前一段时间'),
-              subtitle: const Text('例如提前 90 分钟'),
-              onTap: () =>
-                  Navigator.pop(context, ReminderRuleType.relativeDuration),
-            ),
-            ListTile(
-              enabled: startDate.isNotEmpty && startTime.isNotEmpty,
-              leading: const Icon(Icons.today_outlined),
-              title: const Text('提前几天的指定时间'),
-              subtitle: const Text('例如提前 2 天 09:00'),
-              onTap: () =>
-                  Navigator.pop(context, ReminderRuleType.relativeDayTime),
-            ),
-            ListTile(
-              leading: const Icon(Icons.event_available_outlined),
-              title: const Text('指定日期时间'),
-              subtitle: const Text('设置一个独立的绝对提醒时间'),
-              onTap: () => Navigator.pop(context, ReminderRuleType.absolute),
-            ),
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
-    );
-    if (!mounted || type == null) return;
-    switch (type) {
-      case ReminderRuleType.relativeDuration:
-        await _addCustomDuration(deliveryType);
-        break;
-      case ReminderRuleType.relativeDayTime:
-        await _addRelativeDayTime(deliveryType);
-        break;
-      case ReminderRuleType.absolute:
-        await _addAbsoluteReminder(deliveryType);
-        break;
-    }
-  }
-
-  Future<void> _addCustomDuration(ReminderDeliveryType deliveryType) async {
-    final input = TextEditingController(text: '90');
-    var unit = 1;
-    final minutes = await showDialog<int>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('提前一段时间'),
-          content: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: input,
-                  autofocus: true,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: '数值'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              DropdownButton<int>(
-                value: unit,
-                items: const [
-                  DropdownMenuItem(value: 1, child: Text('分钟')),
-                  DropdownMenuItem(value: 60, child: Text('小时')),
-                  DropdownMenuItem(value: 1440, child: Text('天')),
-                ],
-                onChanged: (value) => setDialogState(() => unit = value ?? 1),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final value = int.tryParse(input.text);
-                Navigator.pop(
-                  context,
-                  value == null || value < 0 ? null : value * unit,
-                );
-              },
-              child: const Text('添加'),
-            ),
-          ],
-        ),
-      ),
-    );
-    input.dispose();
-    if (!mounted || minutes == null) return;
-    if (reminders.any(
-      (item) =>
-          item.type == ReminderRuleType.relativeDuration &&
-          item.offsetMinutes == minutes &&
-          item.deliveryType == deliveryType,
-    )) {
-      _message('这个提醒已经存在。');
-      return;
-    }
-    setState(() {
-      reminders.add(_relativeReminder(minutes, deliveryType: deliveryType));
-      reminderEnabled = true;
-    });
-  }
-
-  Future<void> _addRelativeDayTime(ReminderDeliveryType deliveryType) async {
-    final input = TextEditingController(text: '2');
-    var selectedTime = const TimeOfDay(hour: 9, minute: 0);
-    final result = await showDialog<(int, TimeOfDay)>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('提前几天的指定时间'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: input,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: '提前天数'),
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('提醒时间'),
-                trailing: Text(selectedTime.format(context)),
-                onTap: () async {
-                  final value = await showTimePicker(
-                    context: context,
-                    initialTime: selectedTime,
-                  );
-                  if (value != null) setDialogState(() => selectedTime = value);
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final days = int.tryParse(input.text);
-                Navigator.pop(
-                  context,
-                  days == null || days < 0 ? null : (days, selectedTime),
-                );
-              },
-              child: const Text('添加'),
-            ),
-          ],
-        ),
-      ),
-    );
-    input.dispose();
-    if (!mounted || result == null) return;
-    final time =
-        '${result.$2.hour.toString().padLeft(2, '0')}:${result.$2.minute.toString().padLeft(2, '0')}';
-    if (reminders.any(
-      (item) =>
-          item.type == ReminderRuleType.relativeDayTime &&
-          item.dayOffset == result.$1 &&
-          item.timeOfDay == time &&
-          item.deliveryType == deliveryType,
-    )) {
-      _message('这个提醒已经存在。');
-      return;
-    }
-    setState(() {
-      reminders.add(
-        TaskReminderRule(
-          id: 'reminder-${DateTime.now().microsecondsSinceEpoch}',
-          taskId: widget.task?.id ?? 'draft',
-          type: ReminderRuleType.relativeDayTime,
-          dayOffset: result.$1,
-          timeOfDay: time,
-          sortOrder: reminders.length,
-          deliveryType: deliveryType,
-        ),
-      );
-      reminderEnabled = true;
-    });
-  }
-
-  Future<void> _addAbsoluteReminder(ReminderDeliveryType deliveryType) async {
-    final now = DateTime.now();
-    final date = await showDatePicker(
-      context: context,
-      initialDate: now,
-      firstDate: DateTime(now.year, now.month, now.day),
-      lastDate: DateTime(now.year + 20),
-    );
-    if (!mounted || date == null) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 1))),
-    );
-    if (!mounted || time == null) return;
-    final absolute = DateTime(
-      date.year,
-      date.month,
-      date.day,
-      time.hour,
-      time.minute,
-    );
-    if (!absolute.isAfter(now)) {
+    if (!mounted || absolute == null) return;
+    if (!absolute.isAfter(DateTime.now())) {
       _message('提醒时间必须晚于当前时间。');
       return;
     }
     if (reminders.any(
       (item) =>
           item.type == ReminderRuleType.absolute &&
-          item.absoluteAt?.isAtSameMomentAs(absolute) == true &&
-          item.deliveryType == deliveryType,
+          item.deliveryType == deliveryType &&
+          item.absoluteAt?.isAtSameMomentAs(absolute) == true,
     )) {
       _message('这个提醒已经存在。');
       return;
@@ -1181,6 +781,14 @@ class _TaskEditorState extends State<TaskEditor> {
     });
   }
 
+  TaskReminderRule _relativeReminder(int minutes) => TaskReminderRule(
+    id: 'reminder-${DateTime.now().microsecondsSinceEpoch}-$minutes',
+    taskId: widget.task?.id ?? 'draft',
+    type: ReminderRuleType.relativeDuration,
+    offsetMinutes: minutes,
+    sortOrder: reminders.length,
+  );
+
   Widget _buildTags(BuildContext context) {
     final activeNames = widget.controller.tagDefinitions
         .map((tag) => tag.name)
@@ -1194,36 +802,23 @@ class _TaskEditorState extends State<TaskEditor> {
           .map((tag) => tag.name),
       ...historical,
     ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (labels.isEmpty)
-          Text(
-            '暂无标签',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          )
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: labels.map((name) {
-              final definition = widget.controller.tagDefinitionForName(name);
-              return InputChip(
-                avatar: Icon(
-                  definition?.icon ?? Icons.label_outline,
-                  size: 18,
-                  color: definition?.color,
-                ),
-                label: Text(name),
-                onDeleted: readOnly
-                    ? null
-                    : () => setState(() => selectedTags.remove(name)),
-              );
-            }).toList(),
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: labels.map((name) {
+        final definition = widget.controller.tagDefinitionForName(name);
+        return InputChip(
+          avatar: Icon(
+            definition?.icon ?? Icons.label_outline,
+            size: 18,
+            color: definition?.color,
           ),
-      ],
+          label: Text(name),
+          onDeleted: readOnly
+              ? null
+              : () => setState(() => selectedTags.remove(name)),
+        );
+      }).toList(),
     );
   }
 
@@ -1334,7 +929,6 @@ class _TaskEditorState extends State<TaskEditor> {
       ),
     ),
   );
-
 }
 
 class _Notice extends StatelessWidget {
