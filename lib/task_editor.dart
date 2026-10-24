@@ -8,6 +8,7 @@ import 'planning/planning_models.dart';
 import 'planning/widgets/planning_composer.dart';
 import 'reminder_form_widgets.dart';
 import 'task_widgets.dart';
+import 'ui/app_alert.dart';
 import 'work_form_widgets.dart';
 
 Future<bool?> showTaskEditor(
@@ -337,7 +338,7 @@ class _TaskEditorState extends State<TaskEditor> {
   }
 
   void _message(String text) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+      showAppAlert(context, title: '无法完成操作', message: text);
 
   List<String> _orderedSelectedTags() {
     final activeNames = widget.controller.tagDefinitions

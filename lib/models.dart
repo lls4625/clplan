@@ -1230,7 +1230,8 @@ enum PlanCompletionStyleScope { calendarMonth, calendarWeek, quadrant }
 class AppPreferences {
   const AppPreferences({
     this.theme = 'system',
-    this.font = 'normal',
+    this.followSystemFontScale = true,
+    this.fontScale = 1.0,
     this.language = 'zh',
     this.calendarDensity = 'medium',
     this.calendarSmallHeight = 62,
@@ -1256,9 +1257,12 @@ class AppPreferences {
   static const double minimumCalendarRowHeight = 62;
   static const double maximumCalendarRowHeight = 360;
   static const double maximumCalendarWeeklyCardHeight = 2000;
+  static const double minimumFontScale = 0.8;
+  static const double maximumFontScale = 1.4;
 
   final String theme;
-  final String font;
+  final bool followSystemFontScale;
+  final double fontScale;
   final String language;
   final String calendarDensity;
   final double calendarSmallHeight;
@@ -1286,7 +1290,8 @@ class AppPreferences {
 
   AppPreferences copyWith({
     String? theme,
-    String? font,
+    bool? followSystemFontScale,
+    double? fontScale,
     String? language,
     String? calendarDensity,
     double? calendarSmallHeight,
@@ -1300,7 +1305,9 @@ class AppPreferences {
     bool? reminderSound,
   }) => AppPreferences(
     theme: theme ?? this.theme,
-    font: font ?? this.font,
+    followSystemFontScale:
+        followSystemFontScale ?? this.followSystemFontScale,
+    fontScale: fontScale ?? this.fontScale,
     language: language ?? this.language,
     calendarDensity: calendarDensity ?? this.calendarDensity,
     calendarSmallHeight: calendarSmallHeight ?? this.calendarSmallHeight,

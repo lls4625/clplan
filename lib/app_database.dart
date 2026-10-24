@@ -1496,9 +1496,25 @@ class AppDatabase {
     final calendarDensity = {'small', 'medium', 'large'}.contains(storedDensity)
         ? storedDensity!
         : legacyDensity;
+    final legacyFontScale = switch (values['font']) {
+      'small' => 0.88,
+      'large' => 1.14,
+      _ => 1.0,
+    };
+    final storedFontScale = double.tryParse(values['font_scale'] ?? '');
+    final fontScale = storedFontScale != null &&
+            storedFontScale >= AppPreferences.minimumFontScale &&
+            storedFontScale <= AppPreferences.maximumFontScale
+        ? storedFontScale
+        : legacyFontScale;
+    final storedFollowSystemFontScale = values['follow_system_font_scale'];
+    final followSystemFontScale = storedFollowSystemFontScale == null
+        ? !{'small', 'large'}.contains(values['font'])
+        : storedFollowSystemFontScale != 'false';
     return AppPreferences(
       theme: values['theme'] ?? 'system',
-      font: values['font'] ?? 'normal',
+      followSystemFontScale: followSystemFontScale,
+      fontScale: fontScale,
       language: values['language'] ?? 'zh',
       calendarDensity: calendarDensity,
       calendarSmallHeight: calendarHeight('calendar_small_height', 62),

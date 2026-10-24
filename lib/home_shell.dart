@@ -12,6 +12,8 @@ import 'settings_page.dart';
 import 'stats_page.dart';
 import 'task_editor.dart';
 import 'task_widgets.dart';
+import 'ui/app_alert.dart';
+import 'ui/glass_bottom_navigation.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, required this.controller});
@@ -93,6 +95,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         ];
         return Scaffold(
           key: scaffoldKey,
+          extendBody: true,
           appBar: AppBar(
             automaticallyImplyLeading: false,
             centerTitle: true,
@@ -112,15 +115,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                       anchor: DateTime.now(),
                     ),
                   );
-                  final messenger = ScaffoldMessenger.of(context);
-                  messenger
-                    ..hideCurrentSnackBar()
-                    ..showSnackBar(
-                      const SnackBar(
-                        content: Text('已回到当前统计周期'),
-                        duration: Duration(milliseconds: 1500),
-                      ),
-                    );
                 },
                 icon: const Icon(Icons.restart_alt),
               ),
@@ -146,32 +140,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             _ => null,
           },
           body: IndexedStack(index: index, children: pages),
-          bottomNavigationBar: NavigationBar(
+          bottomNavigationBar: AppBottomNavigation(
             selectedIndex: index,
-            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            onDestinationSelected: (value) => setState(() => index = value),
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.calendar_month_outlined),
-                selectedIcon: Icon(Icons.calendar_month),
-                label: '日历',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.task_alt_outlined),
-                selectedIcon: Icon(Icons.task_alt),
-                label: '计划',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.bar_chart_outlined),
-                selectedIcon: Icon(Icons.bar_chart),
-                label: '统计',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.tune_outlined),
-                selectedIcon: Icon(Icons.tune),
-                label: '设置',
-              ),
-            ],
+            onSelected: (value) {
+              if (value != index) setState(() => index = value);
+            },
           ),
         );
       },
@@ -341,8 +314,11 @@ class _StatsRefreshButtonState extends State<_StatsRefreshButton>
       await widget.onRefresh();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('统计数据刷新失败：$error')));
+        showAppAlert(
+          context,
+          title: '刷新失败',
+          message: '统计数据刷新失败：$error',
+        );
       }
     } finally {
       if (mounted) {

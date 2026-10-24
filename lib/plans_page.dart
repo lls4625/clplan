@@ -6,6 +6,7 @@ import 'plan_widgets.dart';
 import 'stable_filter_chip.dart';
 import 'task_editor.dart';
 import 'task_widgets.dart';
+import 'ui/glass_bottom_navigation.dart';
 
 enum PlanCompletionFilter { unfinished, completed, all }
 
@@ -243,7 +244,12 @@ class _PlansPageState extends State<PlansPage> {
             .toList()
           ..sort(widget.controller.compareTasks);
     return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 110),
+      padding: EdgeInsets.fromLTRB(
+        18,
+        16,
+        18,
+        AppBottomNavigation.contentBottomPadding(context),
+      ),
       children: [
         if (plans.isEmpty)
           Padding(

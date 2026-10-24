@@ -5,6 +5,7 @@ import 'models.dart';
 import 'plan_editor.dart';
 import 'plan_widgets.dart';
 import 'task_widgets.dart';
+import 'ui/glass_bottom_navigation.dart';
 
 const double _calendarMonthHeaderExtent = 56;
 const double _calendarMonthFooterExtent = 10;
@@ -442,7 +443,11 @@ class CalendarPageState extends State<CalendarPage>
             }, childCount: weekCount),
           ),
         ),
-        const SliverToBoxAdapter(child: SizedBox(height: 110)),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: AppBottomNavigation.contentBottomPadding(context),
+          ),
+        ),
       ],
     );
     return Listener(
@@ -507,7 +512,11 @@ class CalendarPageState extends State<CalendarPage>
         child: SizedBox(height: _calendarMonthFooterExtent),
       ),
     ],
-    const SliverToBoxAdapter(child: SizedBox(height: 110)),
+    SliverToBoxAdapter(
+      child: SizedBox(
+        height: AppBottomNavigation.contentBottomPadding(context),
+      ),
+    ),
   ];
 
   void _syncVisibleMonth() {

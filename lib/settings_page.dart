@@ -6,6 +6,8 @@ import 'developer_tip.dart';
 import 'l10n/l10n.dart';
 import 'models.dart';
 import 'notification_service.dart';
+import 'ui/app_alert.dart';
+import 'ui/glass_bottom_navigation.dart';
 import 'xlsx_service.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -19,23 +21,59 @@ class SettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.fromLTRB(18, 16, 18, 110),
+    padding: EdgeInsets.fromLTRB(
+      18,
+      16,
+      18,
+      AppBottomNavigation.contentBottomPadding(context),
+    ),
     children: [
+      _SettingsSection(
+        title: '设置',
+        children: [
+          _SettingsChoiceMenuItem(
+            icon: Icons.palette_outlined,
+            title: '主题',
+            value: controller.preferences.theme,
+            values: const {'system': '跟随系统', 'light': '浅色', 'dark': '深色'},
+            onChanged: (value) => controller.setPreference('theme', value),
+          ),
+          _SettingsChoiceMenuItem(
+            icon: Icons.language_outlined,
+            title: '语言',
+            value: controller.preferences.language,
+            values: const {
+              'system': '跟随系统',
+              'zh': '简体中文',
+              'tw': '繁體中文',
+              'ja': '日本語',
+              'ko': '한국어',
+              'en': 'English',
+            },
+            onChanged: (value) => controller.setPreference('language', value),
+          ),
+          _SettingsMenuItem(
+            icon: Icons.format_size_outlined,
+            title: '字体大小',
+            subtitle: controller.preferences.followSystemFontScale
+                ? '跟随系统'
+                : '自定义 ${(controller.preferences.fontScale * 100).round()}%',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => _FontSizePage(controller: controller),
+              ),
+            ),
+          ),
+        ],
+      ),
       _SettingsSection(
         title: '显示与通知',
         children: [
           _SettingsMenuItem(
-            icon: Icons.palette_outlined,
-            title: '外观与阅读',
-            subtitle: '主题、字号与语言偏好',
-            onTap: () => _openDetail(context, '外观与阅读', _appearanceDetail),
-          ),
-          _SettingsMenuItem(
             icon: Icons.task_alt_outlined,
             title: '计划完成样式',
             subtitle: '月视图、周视图与四象限独立设置',
-            onTap: () =>
-                _openDetail(context, '计划完成样式', _completionStyleDetail),
+            onTap: () => _openDetail(context, '计划完成样式', _completionStyleDetail),
           ),
           _SettingsMenuItem(
             icon: Icons.notifications_active_outlined,
@@ -116,12 +154,6 @@ class SettingsPage extends StatelessWidget {
         title: '支持与关于',
         children: [
           _SettingsMenuItem(
-            icon: Icons.help_outline,
-            title: '帮助与反馈',
-            subtitle: '使用帮助、问题反馈与版本记录',
-            onTap: () => _openDetail(context, '帮助与反馈', _helpDetail),
-          ),
-          _SettingsMenuItem(
             icon: Icons.volunteer_activism_outlined,
             title: context.l10n.tipMenuTitle,
             subtitle: context.l10n.tipMenuSubtitle,
@@ -130,7 +162,7 @@ class SettingsPage extends StatelessWidget {
           _SettingsMenuItem(
             icon: Icons.info_outline,
             title: '关于 ClPlan',
-            subtitle: '应用信息、赞赏与评分',
+            subtitle: '应用信息与赞赏',
             onTap: () => _openDetail(context, '关于', _aboutDetail),
           ),
         ],
@@ -152,42 +184,6 @@ class SettingsPage extends StatelessWidget {
         actionsBuilder: actionsBuilder,
       ),
     ),
-  );
-
-  Widget _appearanceDetail(BuildContext context) => _Panel(
-    title: '显示偏好',
-    children: [
-      _SelectRow(
-        label: '主题',
-        value: controller.preferences.theme,
-        values: const {'system': '跟随系统', 'light': '浅色', 'dark': '深色'},
-        onChanged: (value) => controller.setPreference('theme', value),
-      ),
-      _SelectRow(
-        label: '字号',
-        value: controller.preferences.font,
-        values: const {'small': '小', 'normal': '标准', 'large': '大'},
-        onChanged: (value) => controller.setPreference('font', value),
-      ),
-      _SelectRow(
-        label: '语言偏好',
-        value: controller.preferences.language,
-        values: const {
-          'zh': '简体中文',
-          'tw': '繁體中文',
-          'en': 'English',
-          'ja': '日本語',
-        },
-        onChanged: (value) => controller.setPreference('language', value),
-      ),
-      const Padding(
-        padding: EdgeInsets.only(top: 8),
-        child: Text(
-          '界面文案当前为简体中文；其他语言偏好已预留，后续版本逐步提供。',
-          style: TextStyle(fontSize: 12),
-        ),
-      ),
-    ],
   );
 
   Widget _completionStyleDetail(BuildContext context) => Column(
@@ -257,8 +253,12 @@ class SettingsPage extends StatelessWidget {
                 final granted = await controller.requestReminderPermission();
                 if (!context.mounted) return;
                 if (!granted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('通知未开启，可前往系统设置手动允许。')),
+                  showAppAlert(
+                    context,
+                    title: '通知未开启',
+                    message: '可前往系统设置手动允许通知。',
+                    actionLabel: '系统设置',
+                    onAction: controller.openReminderSettings,
                   );
                 }
               }
@@ -697,27 +697,6 @@ class SettingsPage extends StatelessWidget {
     ],
   );
 
-  Widget _helpDetail(BuildContext context) => _Panel(
-    title: '支持',
-    children: [
-      ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: const Icon(Icons.menu_book_outlined),
-        title: const Text('使用帮助'),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => _message(context, '使用帮助正在整理中'),
-      ),
-      ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: const Icon(Icons.chat_bubble_outline),
-        title: const Text('意见反馈'),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => _message(context, '意见反馈入口即将开放'),
-      ),
-      const Text('帮助中心、问题反馈和版本记录将在后续版本接入。', style: TextStyle(fontSize: 12)),
-    ],
-  );
-
   Widget _aboutDetail(BuildContext context) => _Panel(
     title: '关于应用',
     children: [
@@ -730,10 +709,6 @@ class SettingsPage extends StatelessWidget {
             onPressed: () =>
                 showDeveloperTipPage(context, developerTipController),
             child: Text(context.l10n.tipMenuTitle),
-          ),
-          OutlinedButton(
-            onPressed: () => _rating(context),
-            child: const Text('评分'),
           ),
         ],
       ),
@@ -784,10 +759,8 @@ class SettingsPage extends StatelessWidget {
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
-        builder: (_) => _ContactImportPreview(
-          controller: controller,
-          result: result,
-        ),
+        builder: (_) =>
+            _ContactImportPreview(controller: controller, result: result),
       );
     } catch (exception) {
       if (context.mounted) _message(context, '导入失败：$exception');
@@ -795,7 +768,11 @@ class SettingsPage extends StatelessWidget {
   }
 
   void _message(BuildContext context, String text) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+      showAppAlert(
+        context,
+        title: '导入失败',
+        message: text.replaceFirst('导入失败：', ''),
+      );
 
   Future<void> _editProgressTemplates(BuildContext context) async =>
       Navigator.of(context).push<void>(
@@ -908,20 +885,202 @@ class SettingsPage extends StatelessWidget {
     _ => '',
   };
 
-  void _rating(BuildContext context) => showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('使用感受'),
-      content: const Text('App Store 评分功能即将开放。'),
-      actions: [
-        for (var star = 1; star <= 5; star++)
-          TextButton(
-            onPressed: () => _message(context, '评分功能即将开放'),
-            child: Text('$star ★'),
+}
+
+class _FontSizePage extends StatefulWidget {
+  const _FontSizePage({required this.controller});
+
+  final AppController controller;
+
+  @override
+  State<_FontSizePage> createState() => _FontSizePageState();
+}
+
+class _FontSizePageState extends State<_FontSizePage> {
+  late bool _followSystem;
+  late double _fontScale;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final preferences = widget.controller.preferences;
+    _followSystem = preferences.followSystemFontScale;
+    _fontScale = preferences.fontScale;
+  }
+
+  bool get _hasChanges {
+    final preferences = widget.controller.preferences;
+    return _followSystem != preferences.followSystemFontScale ||
+        (_fontScale - preferences.fontScale).abs() > 0.001;
+  }
+
+  Future<void> _save() async {
+    if (_saving || !_hasChanges) return;
+    setState(() => _saving = true);
+    try {
+      await widget.controller.setFontScalePreferences(
+        followSystem: _followSystem,
+        scale: _fontScale,
+      );
+      if (!mounted) return;
+    } catch (_) {
+      if (!mounted) return;
+      showAppAlert(
+        context,
+        title: '保存失败',
+        message: '字体大小保存失败，请重试。',
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final systemTextScaler = MediaQueryData.fromView(View.of(context))
+        .textScaler;
+    final previewTextScaler = _followSystem
+        ? systemTextScaler
+        : TextScaler.linear(_fontScale);
+    final systemScale = systemTextScaler.scale(16) / 16;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('字体大小'), centerTitle: true),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(18, 4, 18, 36),
+        children: [
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            title: const Text(
+              '跟随系统',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            subtitle: Text('使用系统设置的文字大小（约 ${(systemScale * 100).round()}%）'),
+            value: _followSystem,
+            onChanged: (value) => setState(() => _followSystem = value),
           ),
-      ],
-    ),
-  );
+          if (!_followSystem) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Text('自定义大小'),
+                const Spacer(),
+                Text(
+                  '${(_fontScale * 100).round()}%',
+                  style: TextStyle(
+                    color: colors.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            Slider(
+              min: AppPreferences.minimumFontScale,
+              max: AppPreferences.maximumFontScale,
+              divisions: 12,
+              value: _fontScale,
+              label: '${(_fontScale * 100).round()}%',
+              onChanged: (value) => setState(() => _fontScale = value),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Text('预览', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 10),
+          MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: previewTextScaler),
+            child: Card(
+              color: colors.surfaceContainerLow,
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '工作',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      '项目计划',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '计划 · 进行中',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Text(
+                      '今天：完成方案评审',
+                      style: TextStyle(
+                        fontSize: 20,
+                        color: colors.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      '确认范围、时间与后续安排。',
+                      style: TextStyle(fontSize: 16, height: 1.45),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      '下一项任务',
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text('整理会议记录', style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            '保存后应用于全 App；自定义大小不与系统缩放叠加。',
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: colors.onSurfaceVariant, height: 1.45),
+          ),
+          const SizedBox(height: 22),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _saving || !_hasChanges ? null : _save,
+              child: Text(_saving ? '保存中…' : '保存'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () => setState(() {
+                _followSystem = true;
+                _fontScale = 1.0;
+              }),
+              child: const Text('恢复默认（跟随系统）'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SettingsSection extends StatelessWidget {
@@ -968,12 +1127,14 @@ class _SettingsMenuItem extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.trailingIcon = Icons.chevron_right,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final IconData trailingIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -1000,8 +1161,83 @@ class _SettingsMenuItem extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.bodySmall,
       ),
-      trailing: Icon(Icons.chevron_right, color: colors.primary),
+      trailing: Icon(trailingIcon, color: colors.primary),
       onTap: onTap,
+    );
+  }
+}
+
+class _SettingsChoiceMenuItem extends StatelessWidget {
+  const _SettingsChoiceMenuItem({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.values,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String title;
+  final String value;
+  final Map<String, String> values;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final selectedLabel = values[value] ?? values.values.first;
+    return MenuAnchor(
+      useRootOverlay: true,
+      animated: true,
+      style: MenuStyle(
+        alignment: AlignmentDirectional.bottomEnd,
+        backgroundColor: WidgetStatePropertyAll(colors.surfaceContainerHigh),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        elevation: const WidgetStatePropertyAll(8),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(vertical: 8),
+        ),
+        minimumSize: const WidgetStatePropertyAll(Size(220, 0)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(color: colors.outlineVariant),
+          ),
+        ),
+      ),
+      menuChildren: values.entries.map((entry) {
+        final selected = entry.key == value;
+        return Semantics(
+          selected: selected,
+          child: MenuItemButton(
+            onPressed: () {
+              if (!selected) onChanged(entry.key);
+            },
+            trailingIcon: selected
+                ? Icon(Icons.check_rounded, color: colors.primary)
+                : const SizedBox(width: 24),
+            style: MenuItemButton.styleFrom(
+              minimumSize: const Size(220, 52),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              textStyle: Theme.of(context).textTheme.bodyLarge,
+            ),
+            child: Text(entry.value),
+          ),
+        );
+      }).toList(),
+      builder: (context, menuController, _) => _SettingsMenuItem(
+        icon: icon,
+        title: title,
+        subtitle: selectedLabel,
+        trailingIcon: Icons.keyboard_arrow_down_rounded,
+        onTap: () {
+          if (menuController.isOpen) {
+            menuController.close();
+          } else {
+            menuController.open();
+          }
+        },
+      ),
     );
   }
 }
@@ -1469,10 +1705,10 @@ class _CategoryEditor extends StatelessWidget {
   );
 
   void _showError(BuildContext context, Object exception) =>
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(exception.toString().replaceFirst('Bad state: ', '')),
-        ),
+      showAppAlert(
+        context,
+        title: '操作失败',
+        message: exception.toString().replaceFirst('Bad state: ', ''),
       );
 
   Future<void> _edit(BuildContext context, CategoryDefinition original) async {
@@ -1562,12 +1798,10 @@ class _CategoryEditor extends StatelessWidget {
         );
       } catch (exception) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                exception.toString().replaceFirst('Bad state: ', ''),
-              ),
-            ),
+          showAppAlert(
+            context,
+            title: '保存失败',
+            message: exception.toString().replaceFirst('Bad state: ', ''),
           );
         }
       }
@@ -1648,8 +1882,11 @@ class _ProgressTemplateEditor extends StatelessWidget {
                 template.id,
               );
               if (!deleted && context.mounted) {
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(const SnackBar(content: Text('至少保留一套进度方案。')));
+                showAppAlert(
+                  context,
+                  title: '无法删除方案',
+                  message: '至少需要保留一套进度方案。',
+                );
               }
             },
           );
@@ -1703,10 +1940,10 @@ class _ProgressTemplateEditor extends StatelessWidget {
       );
 
   void _showError(BuildContext context, Object exception) =>
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(exception.toString().replaceFirst('Bad state: ', '')),
-        ),
+      showAppAlert(
+        context,
+        title: '操作失败',
+        message: exception.toString().replaceFirst('Bad state: ', ''),
       );
 }
 
@@ -2013,12 +2250,10 @@ class _ProgressTemplateFormState extends State<_ProgressTemplateForm> {
             if (context.mounted) Navigator.pop(context);
           } catch (exception) {
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    exception.toString().replaceFirst('Bad state: ', ''),
-                  ),
-                ),
+              showAppAlert(
+                context,
+                title: '保存失败',
+                message: exception.toString().replaceFirst('Bad state: ', ''),
               );
             }
           }
@@ -2120,12 +2355,13 @@ class _StatusEditorState extends State<_StatusEditor> {
                           final deleted = await widget.controller.deleteStatus(
                             status.id,
                           );
-                          if (!deleted && context.mounted)
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('正在使用的状态或最后一个状态不能删除。'),
-                              ),
+                          if (!deleted && context.mounted) {
+                            showAppAlert(
+                              context,
+                              title: '无法删除状态',
+                              message: '正在使用的状态或最后一个状态不能删除。',
                             );
+                          }
                         },
                         icon: const Icon(Icons.delete_outline),
                       ),
@@ -2505,10 +2741,10 @@ class _TagEditorState extends State<_TagEditor> {
   }
 
   void _message(BuildContext context, Object exception) =>
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(exception.toString().replaceFirst('Bad state: ', '')),
-        ),
+      showAppAlert(
+        context,
+        title: '操作失败',
+        message: exception.toString().replaceFirst('Bad state: ', ''),
       );
 }
 
@@ -2661,11 +2897,7 @@ class _ImportPreviewState extends State<_ImportPreview> {
                   ExpansionTile(
                     title: Text('新增计划（${additions.length}）'),
                     children: additions
-                        .map(
-                          (plan) => ListTile(
-                            title: Text(plan.name),
-                          ),
-                        )
+                        .map((plan) => ListTile(title: Text(plan.name)))
                         .toList(),
                   ),
                 ...conflicts.map((remote) {
@@ -2734,9 +2966,13 @@ class _ImportPreviewState extends State<_ImportPreview> {
       await widget.controller.importPlans(merged);
       if (mounted) Navigator.pop(context);
     } catch (exception) {
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('导入失败：$exception')));
+      if (mounted) {
+        showAppAlert(
+          context,
+          title: '导入失败',
+          message: exception.toString().replaceFirst('Bad state: ', ''),
+        );
+      }
     } finally {
       if (mounted) setState(() => importing = false);
     }
@@ -2836,17 +3072,13 @@ class _ImportPreviewState extends State<_ImportPreview> {
 }
 
 class _ContactImportPreview extends StatefulWidget {
-  const _ContactImportPreview({
-    required this.controller,
-    required this.result,
-  });
+  const _ContactImportPreview({required this.controller, required this.result});
 
   final AppController controller;
   final ContactImportResult result;
 
   @override
-  State<_ContactImportPreview> createState() =>
-      _ContactImportPreviewState();
+  State<_ContactImportPreview> createState() => _ContactImportPreviewState();
 }
 
 class _ContactImportPreviewState extends State<_ContactImportPreview> {
@@ -2951,8 +3183,10 @@ class _ContactImportPreviewState extends State<_ContactImportPreview> {
       if (mounted) Navigator.pop(context);
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导入失败：$exception')),
+        showAppAlert(
+          context,
+          title: '导入失败',
+          message: exception.toString().replaceFirst('Bad state: ', ''),
         );
       }
     } finally {
@@ -3077,10 +3311,7 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
               children: [
                 SegmentedButton<_ExportScope>(
                   segments: const [
-                    ButtonSegment(
-                      value: _ExportScope.all,
-                      label: Text('全量导出'),
-                    ),
+                    ButtonSegment(value: _ExportScope.all, label: Text('全量导出')),
                     ButtonSegment(
                       value: _ExportScope.filtered,
                       label: Text('按条件导出'),
@@ -3088,9 +3319,8 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                   ],
                   selected: {scope},
                   showSelectedIcon: false,
-                  onSelectionChanged: (selected) => setState(
-                    () => scope = selected.first,
-                  ),
+                  onSelectionChanged: (selected) =>
+                      setState(() => scope = selected.first),
                 ),
                 if (scope == _ExportScope.filtered) ...[
                   const SizedBox(height: 18),
@@ -3166,9 +3396,8 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                         ),
                       ),
                     ],
-                    onChanged: (value) => setState(
-                      () => categoryName = value ?? '',
-                    ),
+                    onChanged: (value) =>
+                        setState(() => categoryName = value ?? ''),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
@@ -3176,10 +3405,7 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                     initialValue: progressTemplateName,
                     decoration: const InputDecoration(labelText: '进度方案'),
                     items: [
-                      const DropdownMenuItem(
-                        value: '',
-                        child: Text('全部进度方案'),
-                      ),
+                      const DropdownMenuItem(value: '', child: Text('全部进度方案')),
                       ...templates.map(
                         (template) => DropdownMenuItem(
                           value: template.name,
@@ -3212,14 +3438,16 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                           ),
                         ),
                       ],
-                      onChanged: (value) => setState(
-                        () => progressNodeName = value ?? '',
-                      ),
+                      onChanged: (value) =>
+                          setState(() => progressNodeName = value ?? ''),
                     ),
                   ],
                   if (widget.controller.tagDefinitions.isNotEmpty) ...[
                     const SizedBox(height: 18),
-                    Text('标签（多选内部为“或”）', style: Theme.of(context).textTheme.titleSmall),
+                    Text(
+                      '标签（多选内部为“或”）',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -3241,7 +3469,10 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                   ],
                   if (widget.controller.contacts.isNotEmpty) ...[
                     const SizedBox(height: 18),
-                    Text('联系人（多选内部为“或”）', style: Theme.of(context).textTheme.titleSmall),
+                    Text(
+                      '联系人（多选内部为“或”）',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -3394,10 +3625,7 @@ class _ContactExportSheetState extends State<_ContactExportSheet> {
               children: [
                 SegmentedButton<_ExportScope>(
                   segments: const [
-                    ButtonSegment(
-                      value: _ExportScope.all,
-                      label: Text('全量导出'),
-                    ),
+                    ButtonSegment(value: _ExportScope.all, label: Text('全量导出')),
                     ButtonSegment(
                       value: _ExportScope.filtered,
                       label: Text('按条件导出'),
@@ -3405,9 +3633,8 @@ class _ContactExportSheetState extends State<_ContactExportSheet> {
                   ],
                   selected: {scope},
                   showSelectedIcon: false,
-                  onSelectionChanged: (selected) => setState(
-                    () => scope = selected.first,
-                  ),
+                  onSelectionChanged: (selected) =>
+                      setState(() => scope = selected.first),
                 ),
                 if (scope == _ExportScope.filtered) ...[
                   const SizedBox(height: 18),
@@ -3467,10 +3694,7 @@ class _ContactExportSheetState extends State<_ContactExportSheet> {
                     ),
                   ],
                   const SizedBox(height: 18),
-                  Text(
-                    '查询结果',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
+                  Text('查询结果', style: Theme.of(context).textTheme.titleSmall),
                   const SizedBox(height: 8),
                   if (keyword.isEmpty)
                     const _ContactExportQueryHint(
@@ -3666,7 +3890,5 @@ ProgressTemplate? _progressTemplateByName(
 
 void _showExportError(BuildContext context, Object exception) {
   final message = exception.toString().replaceFirst('Bad state: ', '');
-  ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text('导出失败：$message')));
+  showAppAlert(context, title: '导出失败', message: message);
 }

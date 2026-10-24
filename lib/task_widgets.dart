@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'app_controller.dart';
 import 'models.dart';
 import 'tag_summary.dart';
+import 'ui/app_alert.dart';
 
 class TaskCard extends StatelessWidget {
   const TaskCard({
@@ -22,8 +23,11 @@ class TaskCard extends StatelessWidget {
 
   Future<void> _deleteTask(BuildContext context) async {
     if (controller.childrenOf(task.id).isNotEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('请先删除或移走该主任务下的子任务。')));
+      showAppAlert(
+        context,
+        title: '无法删除任务',
+        message: '请先删除或移走该主任务下的子任务。',
+      );
       return;
     }
     final confirmed =
@@ -50,8 +54,11 @@ class TaskCard extends StatelessWidget {
       await controller.deleteTask(task);
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.toString())));
+      showAppAlert(
+        context,
+        title: '删除失败',
+        message: error.toString().replaceFirst('Bad state: ', ''),
+      );
     }
   }
 

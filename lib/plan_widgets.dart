@@ -5,6 +5,7 @@ import 'models.dart';
 import 'plan_editor.dart';
 import 'tag_summary.dart';
 import 'task_editor.dart';
+import 'ui/app_alert.dart';
 
 class PlanCard extends StatelessWidget {
   const PlanCard({
@@ -354,9 +355,7 @@ class _EditablePlanCardState extends State<EditablePlanCard> {
   }
 
   void _showMessage(BuildContext context, String message) {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(content: Text(message)));
+    showAppAlert(context, title: '操作失败', message: message);
   }
 
   String _errorMessage(Object error) =>

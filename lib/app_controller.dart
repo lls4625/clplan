@@ -272,7 +272,6 @@ class AppController extends ChangeNotifier {
     await db.savePreference(key, value);
     preferences = switch (key) {
       'theme' => preferences.copyWith(theme: value),
-      'font' => preferences.copyWith(font: value),
       'language' => preferences.copyWith(language: value),
       'calendar_density' => preferences.copyWith(calendarDensity: value),
       'default_reminder_minutes' => preferences.copyWith(
@@ -283,6 +282,28 @@ class AppController extends ChangeNotifier {
     };
     notifyListeners();
     if (key == 'reminder_sound') await _reconcileReminders();
+  }
+
+  Future<void> setFontScalePreferences({
+    required bool followSystem,
+    required double scale,
+  }) async {
+    final normalizedScale = scale
+        .clamp(
+          AppPreferences.minimumFontScale,
+          AppPreferences.maximumFontScale,
+        )
+        .toDouble();
+    await db.savePreference(
+      'follow_system_font_scale',
+      followSystem.toString(),
+    );
+    await db.savePreference('font_scale', normalizedScale.toString());
+    preferences = preferences.copyWith(
+      followSystemFontScale: followSystem,
+      fontScale: normalizedScale,
+    );
+    notifyListeners();
   }
 
   Future<void> setPlanCompletionStyles(

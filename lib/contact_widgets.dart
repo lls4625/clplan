@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
 import 'models.dart';
+import 'ui/app_alert.dart';
 import 'work_form_widgets.dart';
 
 class ContactFormSection extends StatelessWidget {
@@ -340,14 +341,12 @@ Future<ContactEntry?> showContactEditorDialog(
                       }
                     } catch (exception) {
                       if (!dialogContext.mounted) return;
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            exception.toString().replaceFirst(
-                              'Bad state: ',
-                              '',
-                            ),
-                          ),
+                      showAppAlert(
+                        dialogContext,
+                        title: '保存失败',
+                        message: exception.toString().replaceFirst(
+                          'Bad state: ',
+                          '',
                         ),
                       );
                     }

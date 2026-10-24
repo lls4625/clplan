@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
@@ -6,6 +8,7 @@ import 'plan_editor.dart';
 import 'stable_filter_chip.dart';
 import 'task_editor.dart';
 import 'task_widgets.dart';
+import 'ui/glass_bottom_navigation.dart';
 
 enum StatMode { week, month, quarter, half, year, custom }
 
@@ -298,22 +301,26 @@ class _StatsPageState extends State<StatsPage>
               if (pageView == StatView.quadrant) {
                 return Padding(
                   key: const PageStorageKey(StatView.quadrant),
-                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
                   child: _buildQuadrantStats(context, planCohort, cohort),
                 );
               }
               return ListView(
                 key: PageStorageKey(pageView),
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 110),
+                padding: EdgeInsets.fromLTRB(
+                  18,
+                  14,
+                  18,
+                  AppBottomNavigation.contentBottomPadding(context),
+                ),
                 children: [
                   if (pageView == StatView.plans) ...[
-                    ..._buildPlanStats(context, planCohort, startText, endText),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      child: Text(
-                        '计划按时间范围与当前统计周期是否重叠计算；完成率使用计划当前进度，不是历史快照。',
-                        style: TextStyle(fontSize: 12),
-                      ),
+                    ..._buildPlanStats(
+                      context,
+                      planCohort,
+                      startText,
+                      endText,
+                      buckets,
                     ),
                   ],
                   if (pageView == StatView.tasks) ...[
@@ -338,10 +345,6 @@ class _StatsPageState extends State<StatsPage>
                               : '${(complete.length / cohort.length * 100).round()}%',
                         ),
                       ],
-                    ),
-                    _Panel(
-                      title: '完成趋势',
-                      child: _TrendChart(buckets: buckets),
                     ),
                     _Panel(
                       title: '未完成 · 当前状态',
@@ -409,22 +412,6 @@ class _StatsPageState extends State<StatsPage>
                                   .toList(),
                             ),
                     ),
-                    _Panel(
-                      title: '周期外事项',
-                      child: _InlineStatistic(
-                        label: '未安排日期',
-                        value:
-                            '${widget.controller.tasks.where((task) => task.startDate.isEmpty).length} 项',
-                        note: '不计入当前周期统计',
-                      ),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      child: Text(
-                        '任务统计使用现在的状态，不是历史快照；自然周为周一至周日，半年为 1–6 / 7–12 月。',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
                   ],
                   if (pageView == StatView.tags)
                     _buildOtherTagStats(context, planCohort, cohort),
@@ -442,6 +429,7 @@ class _StatsPageState extends State<StatsPage>
     List<PlanItem> plans,
     String periodStart,
     String periodEnd,
+    List<_Bucket> taskBuckets,
   ) {
     final completed = plans.where((plan) => plan.progress.completed).length;
     final progressGroups = <String, _PlanProgressStat>{};
@@ -513,24 +501,16 @@ class _StatsPageState extends State<StatsPage>
             ),
           ];
 
-    final milestones = plans.expand((plan) => plan.milestones).toList();
-    final completedMilestones = milestones
-        .where((milestone) => milestone.completed)
-        .length;
-    final dueMilestones = milestones
-        .where(
-          (milestone) =>
-              milestone.date.compareTo(periodStart) >= 0 &&
-              milestone.date.compareTo(periodEnd) <= 0,
-        )
-        .length;
-
     return [
       _CompletionOverview(
         title: '计划完成概览',
         total: plans.length,
         completed: completed,
         itemLabel: '个计划',
+      ),
+      _Panel(
+        title: '完成趋势',
+        child: _TrendChart(buckets: taskBuckets),
       ),
       _Panel(
         title: '当前进度分布',
@@ -566,16 +546,6 @@ class _StatsPageState extends State<StatsPage>
                       ),
                     )
                     .toList(),
-              ),
-      ),
-      _Panel(
-        title: '里程碑概览',
-        child: milestones.isEmpty
-            ? const _StatisticsEmpty(label: '当前计划暂无里程碑')
-            : _MilestoneOverview(
-                total: milestones.length,
-                completed: completedMilestones,
-                dueInPeriod: dueMilestones,
               ),
       ),
     ];
@@ -623,27 +593,35 @@ class _StatsPageState extends State<StatsPage>
         const SizedBox(height: 10),
         Expanded(
           child: LayoutBuilder(
-            builder: (context, constraints) => GridView.builder(
-              physics: const NeverScrollableScrollPhysics(),
-              padding: EdgeInsets.zero,
-              itemCount: groups.length,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                mainAxisExtent: (constraints.maxHeight - 10) / 2,
-              ),
-              itemBuilder: (context, index) {
-                final group = groups[index];
-                return _QuadrantCard(
-                  group: group,
-                  emptyLabel: _emptyScopeLabel,
-                  completionStyles:
-                      widget.controller.preferences.quadrantCompletionStyles,
-                  onOpenEntry: _openEntry,
-                );
-              },
-            ),
+            builder: (context, constraints) {
+              final bottomInset = MediaQuery.paddingOf(context).bottom;
+              final usableHeight = math.max(
+                0.0,
+                constraints.maxHeight - bottomInset,
+              );
+              final fittedCardExtent = (usableHeight - 10) / 2;
+              final cardExtent = math.max(220.0, fittedCardExtent);
+              return GridView.builder(
+                padding: EdgeInsets.only(bottom: bottomInset),
+                itemCount: groups.length,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  mainAxisExtent: cardExtent,
+                ),
+                itemBuilder: (context, index) {
+                  final group = groups[index];
+                  return _QuadrantCard(
+                    group: group,
+                    emptyLabel: _emptyScopeLabel,
+                    completionStyles:
+                        widget.controller.preferences.quadrantCompletionStyles,
+                    onOpenEntry: _openEntry,
+                  );
+                },
+              );
+            },
           ),
         ),
       ],
@@ -1336,50 +1314,6 @@ class _CategoryDistribution extends StatelessWidget {
   }
 }
 
-class _MilestoneOverview extends StatelessWidget {
-  const _MilestoneOverview({
-    required this.total,
-    required this.completed,
-    required this.dueInPeriod,
-  });
-
-  final int total;
-  final int completed;
-  final int dueInPeriod;
-
-  @override
-  Widget build(BuildContext context) {
-    final ratio = total == 0 ? 0.0 : completed / total;
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _CompactStatistic(value: '$total', label: '里程碑'),
-            ),
-            Expanded(
-              child: _CompactStatistic(value: '$completed', label: '已完成'),
-            ),
-            Expanded(
-              child: _CompactStatistic(value: '$dueInPeriod', label: '本期到期'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Semantics(
-          label: '里程碑完成率',
-          value: '${(ratio * 100).round()}%',
-          child: LinearProgressIndicator(
-            value: ratio,
-            minHeight: 6,
-            borderRadius: BorderRadius.circular(3),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _QuadrantOverview extends StatelessWidget {
   const _QuadrantOverview({
     required this.total,
@@ -1457,40 +1391,6 @@ class _CompactStatistic extends StatelessWidget {
             ?.copyWith(fontWeight: FontWeight.bold),
       ),
       Text(label, style: Theme.of(context).textTheme.bodySmall),
-    ],
-  );
-}
-
-class _InlineStatistic extends StatelessWidget {
-  const _InlineStatistic({
-    required this.label,
-    required this.value,
-    required this.note,
-  });
-
-  final String label;
-  final String value;
-  final String note;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      const Icon(Icons.event_busy_outlined),
-      const SizedBox(width: 10),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-            Text(note, style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ),
-      ),
-      Text(
-        value,
-        style: Theme.of(context).textTheme.titleMedium
-            ?.copyWith(fontWeight: FontWeight.bold),
-      ),
     ],
   );
 }

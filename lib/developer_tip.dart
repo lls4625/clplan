@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'l10n/l10n.dart';
 
 const _tipGold = Color(0xffffc83d);
+const _tipToolbarHeight = 64.0;
+const _tipContentTopGap = 12.0;
 
 class DeveloperTipProduct {
   const DeveloperTipProduct({
@@ -665,7 +667,7 @@ class _DeveloperTipPageState extends State<DeveloperTipPage>
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         centerTitle: false,
-        toolbarHeight: 64,
+        toolbarHeight: _tipToolbarHeight,
         backgroundColor: Colors.transparent,
         title: Text(context.l10n.tipTitle),
       ),
@@ -677,7 +679,14 @@ class _DeveloperTipPageState extends State<DeveloperTipPage>
             child: Stack(
               children: [
                 ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 84, 20, 32),
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    MediaQuery.paddingOf(context).top +
+                        _tipToolbarHeight +
+                        _tipContentTopGap,
+                    20,
+                    32,
+                  ),
                   children: [
                     Text(
                       context.l10n.tipHeading,

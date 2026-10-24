@@ -8,6 +8,7 @@ import 'planning/widgets/planning_composer.dart';
 import 'reminder_form_widgets.dart';
 import 'task_editor.dart';
 import 'task_widgets.dart';
+import 'ui/app_alert.dart';
 import 'work_form_widgets.dart';
 
 Future<bool?> showPlanEditor(
@@ -864,5 +865,5 @@ class _PlanEditorState extends State<PlanEditor> {
   }
 
   void _message(String text) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+      showAppAlert(context, title: '无法完成操作', message: text);
 }
