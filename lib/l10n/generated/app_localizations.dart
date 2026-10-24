@@ -107,13 +107,13 @@ abstract class AppLocalizations {
   /// 新建计划时智能规划面板的标题
   ///
   /// In zh_Hans, this message translates to:
-  /// **'智能规划计划'**
+  /// **'基础规划计划'**
   String get planningPlanTitle;
 
   /// 新建任务时智能规划面板的标题
   ///
   /// In zh_Hans, this message translates to:
-  /// **'智能规划任务'**
+  /// **'基础规划任务'**
   String get planningTaskTitle;
 
   /// No description provided for @planningClose.

@@ -1,19 +1,26 @@
 import 'dart:io';
 
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'app_database.dart';
+import 'l10n/ui_text.dart';
 import 'models.dart';
 
 enum ReminderPermissionState { authorized, disabled, unsupported }
 
 class ReminderNotificationAction {
-  const ReminderNotificationAction({required this.taskId, this.actionId = ''});
+  const ReminderNotificationAction({
+    required this.ownerType,
+    required this.ownerId,
+    this.actionId = '',
+  });
 
-  final String taskId;
+  final String ownerType;
+  final String ownerId;
   final String actionId;
 }
 
@@ -122,11 +129,14 @@ class NotificationService {
     NotificationResponse response,
   ) {
     final payload = response.payload ?? '';
-    if (!payload.startsWith('task:')) return null;
-    final taskId = payload.substring('task:'.length);
-    if (taskId.isEmpty) return null;
+    final separator = payload.indexOf(':');
+    if (separator <= 0 || separator == payload.length - 1) return null;
+    final ownerType = payload.substring(0, separator);
+    if (ownerType != 'task' && ownerType != 'plan') return null;
+    final ownerId = payload.substring(separator + 1);
     return ReminderNotificationAction(
-      taskId: taskId,
+      ownerType: ownerType,
+      ownerId: ownerId,
       actionId: response.actionId ?? '',
     );
   }
@@ -182,6 +192,7 @@ class NotificationService {
     List<PlanItem> plans, {
     required bool Function(TaskItem task) isDone,
     required bool sound,
+    required String language,
     bool requestPermission = false,
   }) async {
     if (!Platform.isIOS || !_initialized) return;
@@ -274,7 +285,7 @@ class NotificationService {
           await _plugin.zonedSchedule(
             id: notificationId,
             title: candidate.title,
-            body: _notificationBody(candidate),
+            body: _notificationBody(candidate, language),
             scheduledDate: tz.TZDateTime.from(candidate.fireAt, tz.local),
             notificationDetails: NotificationDetails(
               iOS: DarwinNotificationDetails(
@@ -312,10 +323,37 @@ class NotificationService {
     }
   }
 
-  String _notificationBody(_ReminderCandidate candidate) =>
-      '${candidate.rule.label} · '
-      '${candidate.ownerType == 'task' ? '任务时间' : '计划期间'} '
-      '${candidate.startLabel}';
+  String _notificationBody(_ReminderCandidate candidate, String language) {
+    final systemLanguage = Platform.localeName.toLowerCase();
+    final resolvedLanguage = language == 'system'
+        ? systemLanguage.startsWith('zh') &&
+                  (systemLanguage.contains('hant') ||
+                      systemLanguage.contains('tw') ||
+                      systemLanguage.contains('hk'))
+              ? 'tw'
+              : systemLanguage.startsWith('ja')
+              ? 'ja'
+              : systemLanguage.startsWith('ko')
+              ? 'ko'
+              : systemLanguage.startsWith('en')
+              ? 'en'
+              : 'en'
+        : language;
+    final locale = switch (resolvedLanguage) {
+      'tw' => const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+      'ja' => const Locale('ja'),
+      'ko' => const Locale('ko'),
+      'en' => const Locale('en'),
+      _ => const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
+    };
+    final rule = localizeUiTextForLocale(locale, candidate.rule.label);
+    final owner = localizeUiTextForLocale(
+      locale,
+      candidate.ownerType == 'task' ? '任务时间' : '计划期间',
+    );
+    final range = localizeUiTextForLocale(locale, candidate.startLabel);
+    return '$rule · $owner $range';
+  }
 
   int _stableNotificationId(String value) {
     var hash = 0x811c9dc5;

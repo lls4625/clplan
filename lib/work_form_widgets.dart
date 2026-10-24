@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
+
+import 'l10n/ui_text.dart';
 
 class WorkFormSection extends StatelessWidget {
   const WorkFormSection({
@@ -56,7 +58,7 @@ class WorkFormSection extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (trailing != null) trailing!,
+                ?trailing,
               ],
             ),
             if (children.isNotEmpty) const SizedBox(height: 14),

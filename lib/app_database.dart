@@ -14,7 +14,7 @@ class AppDatabase {
     final root = await getDatabasesPath();
     return openDatabase(
       p.join(root, 'clplan.sqlite3'),
-      version: 13,
+      version: 14,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = OFF');
         await db.setJournalMode('WAL');
@@ -221,6 +221,10 @@ class AppDatabase {
         }
         if (oldVersion < 13) {
           await _addColumnIfMissing(db, 'plans', 'completed_at', 'TEXT');
+        }
+        if (oldVersion < 14) {
+          await db.delete('table_columns');
+          await _seedPlanColumns(db);
         }
       },
     );
@@ -770,22 +774,24 @@ class AppDatabase {
     for (final status in statuses) {
       await db.insert('task_statuses', status.toMap());
     }
+    await _seedPlanColumns(db);
+  }
+
+  Future<void> _seedPlanColumns(DatabaseExecutor db) async {
     const columns = {
-      'id': '唯一 ID',
-      'title': '标题',
-      'description': '说明',
-      'type': '分类',
-      'contact': '联系人',
-      'status': '状态 ID',
+      'id': '计划 ID',
+      'name': '计划名称',
+      'description': '计划内容',
+      'category': '分类',
+      'progressTemplate': '进度方案',
+      'progressNode': '进度节点',
       'tags': '标签',
       'startDate': '开始日期',
-      'startTime': '开始时间',
+      'targetDate': '目标日期',
+      'contacts': '联系人',
+      'calendarDisplayMode': '日历显示',
       'reminderEnabled': '启用提醒',
-      'reminders': '提醒规则',
-      'reason': '未完成原因',
       'completedAt': '完成时间',
-      'originId': '来源 ID',
-      'parentTaskId': '主任务 ID',
       'updatedAt': '修改时间',
     };
     var order = 0;
@@ -793,7 +799,7 @@ class AppDatabase {
       await db.insert('table_columns', {
         'key_name': entry.key,
         'label': entry.value,
-        'visible': entry.key == 'id' || entry.key == 'status' ? 0 : 1,
+        'visible': entry.key == 'id' ? 0 : 1,
         'sort_order': order++,
       });
     }
@@ -1112,9 +1118,7 @@ class AppDatabase {
         milestones: milestonesByPlan[id] ?? const [],
         rules: rulesByPlan[id] ?? const [],
         updatedAt: DateTime.parse(row['updated_at']! as String),
-        completedAt: DateTime.tryParse(
-          (row['completed_at'] as String?) ?? '',
-        ),
+        completedAt: DateTime.tryParse((row['completed_at'] as String?) ?? ''),
         calendarDisplayMode: planCalendarDisplayModeFromName(
           row['calendar_display_mode'] as String?,
         ),
@@ -1240,6 +1244,34 @@ class AppDatabase {
         where: 'plan_id = ?',
         whereArgs: [plan.id],
       );
+      final today = DateTime.now();
+      final todayText =
+          '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+      final generatedTasks = await txn.query(
+        'tasks',
+        columns: ['id'],
+        where: 'plan_id = ? AND recurrence_rule_id IS NOT NULL AND detached_from_rule = 0 AND occurrence_date >= ?',
+        whereArgs: [plan.id, todayText],
+      );
+      for (final row in generatedTasks) {
+        final taskId = row['id']! as String;
+        final childCount = Sqflite.firstIntValue(
+          await txn.rawQuery(
+            'SELECT COUNT(*) FROM tasks WHERE parent_task_id = ?',
+            [taskId],
+          ),
+        );
+        if ((childCount ?? 0) > 0) {
+          await txn.update(
+            'tasks',
+            {'recurrence_rule_id': null, 'detached_from_rule': 1},
+            where: 'id = ?',
+            whereArgs: [taskId],
+          );
+        } else {
+          await _deleteTaskGraph(txn, taskId);
+        }
+      }
       for (final oldRule in oldRules) {
         await _deleteProgressSnapshot(txn, 'rule', oldRule['id']! as String);
       }
@@ -1335,6 +1367,26 @@ class AppDatabase {
       where: 'owner_type = ? AND owner_id = ?',
       whereArgs: [ownerType, ownerId],
     );
+  }
+
+  Future<void> _deleteTaskGraph(DatabaseExecutor db, String id) async {
+    await db.delete('task_tags', where: 'task_id = ?', whereArgs: [id]);
+    await db.delete('task_contacts', where: 'task_id = ?', whereArgs: [id]);
+    await db.delete('task_followups', where: 'task_id = ?', whereArgs: [id]);
+    await db.delete('task_history', where: 'task_id = ?', whereArgs: [id]);
+    await db.delete(
+      'task_reminder_rules',
+      where: 'task_id = ?',
+      whereArgs: [id],
+    );
+    await db.delete('notification_jobs', where: 'task_id = ?', whereArgs: [id]);
+    await db.delete(
+      'alarm_jobs',
+      where: 'owner_type = ? AND owner_id = ?',
+      whereArgs: ['task', id],
+    );
+    await _deleteProgressSnapshot(db, 'task', id);
+    await db.delete('tasks', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> materializeRecurringTasks() async {
@@ -1493,7 +1545,8 @@ class AppDatabase {
       final parsed = PlanCompletionStyle.values
           .where(
             (style) =>
-                allowed.contains(style) && stored.split(',').contains(style.name),
+                allowed.contains(style) &&
+                stored.split(',').contains(style.name),
           )
           .toSet();
       return parsed.isEmpty ? fallback : parsed;
@@ -1510,7 +1563,8 @@ class AppDatabase {
       _ => 1.0,
     };
     final storedFontScale = double.tryParse(values['font_scale'] ?? '');
-    final fontScale = storedFontScale != null &&
+    final fontScale =
+        storedFontScale != null &&
             storedFontScale >= AppPreferences.minimumFontScale &&
             storedFontScale <= AppPreferences.maximumFontScale
         ? storedFontScale
@@ -1523,7 +1577,7 @@ class AppDatabase {
       theme: values['theme'] ?? 'system',
       followSystemFontScale: followSystemFontScale,
       fontScale: fontScale,
-      language: values['language'] ?? 'zh',
+      language: values['language'] ?? 'system',
       calendarDensity: calendarDensity,
       calendarSmallHeight: calendarHeight('calendar_small_height', 62),
       calendarMediumHeight: calendarHeight('calendar_medium_height', 82),
@@ -1542,10 +1596,7 @@ class AppDatabase {
       })(),
       calendarMonthCompletionStyles: completionStyles(
         'calendar_month_completion_styles',
-        const {
-          PlanCompletionStyle.dimText,
-          PlanCompletionStyle.strikethrough,
-        },
+        const {PlanCompletionStyle.dimText, PlanCompletionStyle.strikethrough},
         allowed: const {
           PlanCompletionStyle.dimText,
           PlanCompletionStyle.border,
@@ -1554,18 +1605,12 @@ class AppDatabase {
       ),
       calendarWeekCompletionStyles: completionStyles(
         'calendar_week_completion_styles',
-        const {
-          PlanCompletionStyle.dimText,
-          PlanCompletionStyle.check,
-        },
+        const {PlanCompletionStyle.dimText, PlanCompletionStyle.check},
         allowed: PlanCompletionStyle.values.toSet(),
       ),
       quadrantCompletionStyles: completionStyles(
         'quadrant_completion_styles',
-        const {
-          PlanCompletionStyle.dimText,
-          PlanCompletionStyle.check,
-        },
+        const {PlanCompletionStyle.dimText, PlanCompletionStyle.check},
         allowed: PlanCompletionStyle.values.toSet(),
       ),
       defaultReminderMinutes:

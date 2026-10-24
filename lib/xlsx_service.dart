@@ -20,10 +20,7 @@ class ImportResult {
 }
 
 class ContactImportResult {
-  const ContactImportResult({
-    required this.contacts,
-    required this.warnings,
-  });
+  const ContactImportResult({required this.contacts, required this.warnings});
 
   final List<ContactEntry> contacts;
   final List<String> warnings;
@@ -50,6 +47,9 @@ class XlsxService {
     'reminders': '提醒规则',
     'completedAt': '完成时间',
     'updatedAt': '更新时间',
+    'contactIds': '联系人ID',
+    'milestones': '里程碑',
+    'recurrenceRules': '周期任务',
   };
 
   static const _calendarModes = <String, PlanCalendarDisplayMode>{
@@ -117,22 +117,16 @@ class XlsxService {
     final defaultName = workbook.getDefaultSheet();
     final sheet = workbook['联系人'];
     final guide = workbook['填写说明'];
-    if (defaultName != null &&
-        defaultName != '联系人' &&
-        defaultName != '填写说明') {
+    if (defaultName != null && defaultName != '联系人' && defaultName != '填写说明') {
       workbook.delete(defaultName);
     }
 
     _writeContactSheet(sheet, contacts);
     guide.appendRow([TextCellValue('ClPlan 联系人导入说明')]);
     guide.appendRow([
-      TextCellValue(
-        '“姓名”为必填项；联系人ID是隐藏且锁定的主键，有主键时更新对应联系人，无主键时新增联系人。',
-      ),
+      TextCellValue('“姓名”为必填项；联系人ID是隐藏且锁定的主键，有主键时更新对应联系人，无主键时新增联系人。'),
     ]);
-    guide.appendRow([
-      TextCellValue('再次导入不会删除本地已有的其他联系人；备注最多 100 个字符。'),
-    ]);
+    guide.appendRow([TextCellValue('再次导入不会删除本地已有的其他联系人；备注最多 100 个字符。')]);
     guide.setColumnWidth(0, 96);
 
     final rawBytes = workbook.save();
@@ -206,6 +200,38 @@ class XlsxService {
           ),
           plan.completedAt?.toIso8601String() ?? '',
           plan.updatedAt.toIso8601String(),
+          plan.contacts.map((contact) => contact.id).join(','),
+          jsonEncode(
+            plan.milestones
+                .map(
+                  (item) => {
+                    'id': item.id,
+                    'name': item.name,
+                    'date': item.date,
+                    'description': item.description,
+                    'completed': item.completed,
+                  },
+                )
+                .toList(),
+          ),
+          jsonEncode(
+            plan.rules
+                .map(
+                  (rule) => {
+                    'id': rule.id,
+                    'title': rule.title,
+                    'description': rule.description,
+                    'startDate': rule.startDate,
+                    'endDate': rule.endDate,
+                    'startTime': rule.startTime,
+                    'weekdays': rule.weekdays.toList()..sort(),
+                    'enabled': rule.enabled,
+                    'progressTemplate': rule.progress.templateName,
+                    'progressNode': rule.progress.currentNode?.name ?? '',
+                  },
+                )
+                .toList(),
+          ),
         ].map(TextCellValue.new).toList(),
       );
     }
@@ -227,6 +253,9 @@ class XlsxService {
       42,
       24,
       24,
+      30,
+      48,
+      56,
     ];
     for (var index = 0; index < widths.length; index++) {
       sheet.setColumnWidth(index, widths[index]);
@@ -246,10 +275,7 @@ class XlsxService {
     sheet.setRowHeight(0, 26);
   }
 
-  static void _writeContactSheet(
-    Sheet sheet,
-    List<ContactEntry> contacts,
-  ) {
+  static void _writeContactSheet(Sheet sheet, List<ContactEntry> contacts) {
     sheet.appendRow(contactHeaders.values.map(TextCellValue.new).toList());
     for (final contact in contacts) {
       sheet.appendRow(
@@ -293,6 +319,7 @@ class XlsxService {
       ['再次导入只会新增计划或更新相同计划ID的数据，不会删除本地已有的其他计划。'],
       ['分类、进度方案、进度节点、四象限标签均可在“计划”工作表下拉选择。'],
       ['普通标签和联系人可填写多个，请使用英文逗号 , 分隔；可选内容见下方。'],
+      ['联系人ID、里程碑和周期任务用于完整备份；除非明确了解 JSON 结构，否则请保留导出值。'],
       [],
     ];
     for (final row in guideRows) {
@@ -345,7 +372,7 @@ class XlsxService {
     for (var index = 0; index < headings.length; index++) {
       sheet.setColumnWidth(index, index == 3 || index == 4 ? 28 : 20);
       sheet
-          .cell(CellIndex.indexByColumnRow(columnIndex: index, rowIndex: 6))
+          .cell(CellIndex.indexByColumnRow(columnIndex: index, rowIndex: 7))
           .cellStyle = CellStyle(
         bold: true,
         fontColorHex: ExcelColor.white,
@@ -513,9 +540,7 @@ class XlsxService {
       for (final template in progressTemplates) template.name: template,
     };
     final tagByName = {for (final tag in tags) tag.name: tag};
-    final contactByName = {
-      for (final contact in contacts) contact.name: contact,
-    };
+    final contactById = {for (final contact in contacts) contact.id: contact};
     final defaultTemplate = progressTemplates.isEmpty
         ? null
         : progressTemplates.first;
@@ -610,12 +635,30 @@ class XlsxService {
       }
 
       final importedContacts = <ContactEntry>[];
-      for (final contactName in _splitComma(values['contacts'] ?? '')) {
-        final contact = contactByName[contactName];
-        if (contact == null) {
-          warnings.add('第 ${rowIndex + 1} 行联系人“$contactName”不存在，已忽略。');
-        } else {
-          importedContacts.add(contact);
+      final contactIds = _splitComma(values['contactIds'] ?? '');
+      if (contactIds.isNotEmpty) {
+        for (final contactId in contactIds) {
+          final contact = contactById[contactId];
+          if (contact == null) {
+            warnings.add('第 ${rowIndex + 1} 行联系人 ID“$contactId”不存在，已忽略。');
+          } else {
+            importedContacts.add(contact);
+          }
+        }
+      } else {
+        for (final contactName in _splitComma(values['contacts'] ?? '')) {
+          final matches = contacts
+              .where((contact) => contact.name == contactName)
+              .toList();
+          if (matches.length == 1) {
+            importedContacts.add(matches.single);
+          } else if (matches.isEmpty) {
+            warnings.add('第 ${rowIndex + 1} 行联系人“$contactName”不存在，已忽略。');
+          } else {
+            warnings.add(
+              '第 ${rowIndex + 1} 行联系人“$contactName”存在同名记录，请填写联系人ID。',
+            );
+          }
         }
       }
       final reminderRules = _parseReminders(
@@ -658,8 +701,20 @@ class XlsxService {
             currentNodeId: currentNode.id,
             nodes: progressNodes,
           ),
-          milestones: const [],
-          rules: const [],
+          milestones: _parseMilestones(
+            values['milestones'] ?? '',
+            id,
+            rowIndex + 1,
+            warnings,
+          ),
+          rules: _parseRecurrenceRules(
+            values['recurrenceRules'] ?? '',
+            id,
+            rowIndex + 1,
+            warnings,
+            templateByName,
+            defaultTemplate,
+          ),
           completedAt: DateTime.tryParse(values['completedAt'] ?? ''),
           updatedAt: DateTime.tryParse(values['updatedAt'] ?? '') ?? now,
           calendarDisplayMode:
@@ -731,6 +786,112 @@ class XlsxService {
     }
   }
 
+  static List<PlanMilestone> _parseMilestones(
+    String raw,
+    String planId,
+    int rowNumber,
+    List<String> warnings,
+  ) {
+    if (raw.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) throw const FormatException();
+      return decoded.indexed.map((entry) {
+        final map = Map<String, dynamic>.from(entry.$2 as Map);
+        final name = (map['name'] as String? ?? '').trim();
+        final date = _normalizeDate(map['date'] as String? ?? '');
+        if (name.isEmpty || date == null) throw const FormatException();
+        return PlanMilestone(
+          id: (map['id'] as String?)?.trim().isNotEmpty == true
+              ? map['id'] as String
+              : 'milestone-$planId-${entry.$1}',
+          name: name,
+          date: date,
+          description: map['description'] as String? ?? '',
+          completed: map['completed'] == true,
+          sortOrder: entry.$1,
+        );
+      }).toList();
+    } catch (_) {
+      warnings.add('第 $rowNumber 行里程碑格式无效，已忽略。');
+      return const [];
+    }
+  }
+
+  static List<RecurrenceRule> _parseRecurrenceRules(
+    String raw,
+    String planId,
+    int rowNumber,
+    List<String> warnings,
+    Map<String, ProgressTemplate> templateByName,
+    ProgressTemplate defaultTemplate,
+  ) {
+    if (raw.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) throw const FormatException();
+      return decoded.indexed.map((entry) {
+        final map = Map<String, dynamic>.from(entry.$2 as Map);
+        final title = (map['title'] as String? ?? '').trim();
+        final start = _normalizeDate(map['startDate'] as String? ?? '');
+        final end = _normalizeDate(map['endDate'] as String? ?? '');
+        if (title.isEmpty ||
+            start == null ||
+            end == null ||
+            start.compareTo(end) > 0) {
+          throw const FormatException();
+        }
+        final template =
+            templateByName[map['progressTemplate'] as String? ?? ''] ??
+            defaultTemplate;
+        final requestedNode = map['progressNode'] as String? ?? '';
+        final instanceId = 'rule-progress-$planId-${entry.$1}';
+        final nodes = template.nodes
+            .map(
+              (node) => ProgressNode(
+                id: '$instanceId-${node.id}',
+                name: node.name,
+                colorValue: node.colorValue,
+                kind: node.kind,
+                sortOrder: node.sortOrder,
+              ),
+            )
+            .toList();
+        final current = nodes.firstWhere(
+          (node) => node.name == requestedNode,
+          orElse: () => nodes.first,
+        );
+        final rawDays = map['weekdays'];
+        final weekdays = rawDays is List
+            ? rawDays.whereType<num>().map((value) => value.toInt()).toSet()
+            : <int>{};
+        return RecurrenceRule(
+          id: (map['id'] as String?)?.trim().isNotEmpty == true
+              ? map['id'] as String
+              : 'recurrence-$planId-${entry.$1}',
+          planId: planId,
+          title: title,
+          description: map['description'] as String? ?? '',
+          startDate: start,
+          endDate: end,
+          startTime: map['startTime'] as String? ?? '',
+          weekdays: weekdays,
+          enabled: map['enabled'] != false,
+          progress: ProgressSnapshot(
+            instanceId: instanceId,
+            sourceTemplateId: template.id,
+            templateName: template.name,
+            currentNodeId: current.id,
+            nodes: nodes,
+          ),
+        );
+      }).toList();
+    } catch (_) {
+      warnings.add('第 $rowNumber 行周期任务格式无效，已忽略。');
+      return const [];
+    }
+  }
+
   static Uint8List _addWorkbookValidation(
     Uint8List bytes, {
     required List<CategoryDefinition> categories,
@@ -752,7 +913,7 @@ class XlsxService {
     final planSheetFile = archive.findFile(planSheetPath);
     if (planSheetFile == null) return bytes;
 
-    const guideStartRow = 8;
+    const guideStartRow = 9;
     final quadrantCount = tags.where((tag) => tag.isQuadrant).length;
     final names = <String>[
       _definedName('ClPlanCategories', 'A', categories.length, guideStartRow),
@@ -793,9 +954,8 @@ class XlsxService {
     );
 
     var stylesXml = utf8.decode(stylesFile.content as List<int>);
-    final cellXfsMatch = RegExp(
-      r'<cellXfs count="(\d+)">',
-    ).firstMatch(stylesXml);
+    final cellXfsMatch = RegExp(r'<cellXfs count="(\d+)">')
+        .firstMatch(stylesXml);
     if (cellXfsMatch == null) return bytes;
     final unlockedStyleIndex = int.parse(cellXfsMatch.group(1)!);
     stylesXml = stylesXml.replaceFirst(
@@ -824,7 +984,11 @@ class XlsxService {
       if (minColumn <= 1 && maxColumn >= 1) {
         columnXml = _withXmlAttribute(columnXml, 'hidden', '1');
       }
-      if (minColumn >= 2) {
+      if (minColumn <= 17 && maxColumn >= 17) {
+        columnXml = _withXmlAttribute(columnXml, 'hidden', '1');
+      }
+      final containsContactIds = minColumn <= 17 && maxColumn >= 17;
+      if (minColumn >= 2 && !containsContactIds) {
         columnXml = _withXmlAttribute(
           columnXml,
           'style',
@@ -835,10 +999,7 @@ class XlsxService {
     });
     const protection =
         '<sheetProtection sheet="1" objects="1" scenarios="1" formatColumns="1" selectLockedCells="1" selectUnlockedCells="0"/>';
-    sheetXml = sheetXml.replaceFirst(
-      '</sheetData>',
-      '</sheetData>$protection',
-    );
+    sheetXml = sheetXml.replaceFirst('</sheetData>', '</sheetData>$protection');
     const validations = '''<dataValidations count="6">
 <dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorStyle="stop" promptTitle="选择分类" prompt="请选择 App 内已有分类，也可留空。" errorTitle="分类无效" error="请从下拉列表选择分类。" sqref="D2:D10001"><formula1>ClPlanCategories</formula1></dataValidation>
 <dataValidation type="list" allowBlank="0" showInputMessage="1" showErrorMessage="1" errorStyle="stop" promptTitle="选择进度方案" prompt="选择方案后，进度节点下拉会显示对应节点。" errorTitle="进度方案无效" error="请从下拉列表选择进度方案。" sqref="E2:E10001"><formula1>ClPlanProgressTemplates</formula1></dataValidation>
@@ -890,9 +1051,8 @@ class XlsxService {
     if (sheetFile == null) return bytes;
 
     var stylesXml = utf8.decode(stylesFile.content as List<int>);
-    final cellXfsMatch = RegExp(
-      r'<cellXfs count="(\d+)">',
-    ).firstMatch(stylesXml);
+    final cellXfsMatch = RegExp(r'<cellXfs count="(\d+)">')
+        .firstMatch(stylesXml);
     if (cellXfsMatch == null) return bytes;
     final unlockedStyleIndex = int.parse(cellXfsMatch.group(1)!);
     stylesXml = stylesXml.replaceFirst(
@@ -932,14 +1092,9 @@ class XlsxService {
     });
     const protection =
         '<sheetProtection sheet="1" objects="1" scenarios="1" formatColumns="1" selectLockedCells="1" selectUnlockedCells="0"/>';
-    sheetXml = sheetXml.replaceFirst(
-      '</sheetData>',
-      '</sheetData>$protection',
-    );
+    sheetXml = sheetXml.replaceFirst('</sheetData>', '</sheetData>$protection');
     final sheetData = utf8.encode(sheetXml);
-    archive.addFile(
-      ArchiveFile(sheetFile.name, sheetData.length, sheetData),
-    );
+    archive.addFile(ArchiveFile(sheetFile.name, sheetData.length, sheetData));
     return Uint8List.fromList(ZipEncoder().encode(archive)!);
   }
 

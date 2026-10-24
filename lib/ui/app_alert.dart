@@ -1,5 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
+import '../l10n/ui_text.dart' show localizeUiText;
+
 void showAppAlert(
   BuildContext context, {
   required String title,
@@ -12,12 +14,12 @@ void showAppAlert(
   showCupertinoDialog<void>(
     context: context,
     builder: (dialogContext) => CupertinoAlertDialog(
-      title: Text(title),
-      content: Text(message),
+      title: Text(localizeUiText(dialogContext, title)),
+      content: Text(localizeUiText(dialogContext, message)),
       actions: [
         CupertinoDialogAction(
           onPressed: () => Navigator.of(dialogContext).pop(),
-          child: Text(dismissLabel),
+          child: Text(localizeUiText(dialogContext, dismissLabel)),
         ),
         if (actionLabel != null && onAction != null)
           CupertinoDialogAction(
@@ -25,7 +27,7 @@ void showAppAlert(
               Navigator.of(dialogContext).pop();
               onAction();
             },
-            child: Text(actionLabel),
+            child: Text(localizeUiText(dialogContext, actionLabel)),
           ),
       ],
     ),

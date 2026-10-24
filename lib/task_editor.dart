@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:intl/intl.dart';
 
 import 'app_controller.dart';
 import 'contact_widgets.dart';
 import 'models.dart';
+import 'l10n/ui_text.dart';
 import 'planning/planning_models.dart';
 import 'planning/widgets/planning_composer.dart';
 import 'reminder_form_widgets.dart';
@@ -231,16 +232,20 @@ class _TaskEditorState extends State<TaskEditor> {
         orElse: () => widget.controller.statusOf(statusId),
       );
       final history = <String>[];
-      if (old != null && old.startDate != startDate)
+      if (old != null && old.startDate != startDate) {
         history.add(
           '开始日期：${old.startDate.isEmpty ? '未安排' : old.startDate} → ${startDate.isEmpty ? '未安排' : startDate}',
         );
-      if (old != null && old.progress?.currentNodeId != progress.currentNodeId)
+      }
+      if (old != null &&
+          old.progress?.currentNodeId != progress.currentNodeId) {
         history.add(
           '进度：${old.progress?.currentNode?.name ?? widget.controller.statusOf(old.statusId).name} → ${nextNode?.name ?? nextStatus.name}',
         );
-      if (old != null && old.parentTaskId != selectedParentId)
+      }
+      if (old != null && old.parentTaskId != selectedParentId) {
         history.add('主任务关联已调整');
+      }
       if (old != null &&
           old.reminders
                   .map((item) => '${item.deliveryTypeName}:${item.label}')
@@ -260,8 +265,9 @@ class _TaskEditorState extends State<TaskEditor> {
               );
               for (final snapshot
                   in old?.tagSnapshots ?? const <TaskTagSnapshot>[]) {
-                if (snapshot.name == tagName && definition == null)
+                if (snapshot.name == tagName && definition == null) {
                   return snapshot;
+                }
               }
               return TaskTagSnapshot(
                 sourceTagId: definition?.id,
@@ -290,7 +296,7 @@ class _TaskEditorState extends State<TaskEditor> {
         startTime: readOnly ? old!.startTime : startTime,
         reason: readOnly ? old!.reason : reason.text.trim(),
         completedAt: nextStatus.completed
-            ? (wasDone ? old!.completedAt : now)
+            ? (wasDone ? old.completedAt : now)
             : null,
         originId: old?.originId ?? widget.originId,
         parentTaskId: readOnly ? old!.parentTaskId : selectedParentId,
@@ -330,8 +336,9 @@ class _TaskEditorState extends State<TaskEditor> {
         );
       }
     } catch (exception) {
-      if (mounted)
+      if (mounted) {
         _message(exception.toString().replaceFirst('Bad state: ', ''));
+      }
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -397,7 +404,7 @@ class _TaskEditorState extends State<TaskEditor> {
         actions: [
           if (widget.task != null && !readOnly && !hasChildren)
             PopupMenuButton<String>(
-              tooltip: '更多操作',
+              tooltip: localizeUiText(context, '更多操作'),
               enabled: !saving,
               onSelected: (value) {
                 if (value == 'delete') _deleteTask();
@@ -477,8 +484,8 @@ class _TaskEditorState extends State<TaskEditor> {
                             maxLength: 100,
                             textInputAction: TextInputAction.next,
                             scrollPadding: const EdgeInsets.only(bottom: 160),
-                            decoration: const InputDecoration(
-                              labelText: '标题',
+                            decoration: InputDecoration(
+                              labelText: localizeUiText(context, '标题'),
                               alignLabelWithHint: true,
                             ),
                             validator: (value) =>
@@ -493,8 +500,8 @@ class _TaskEditorState extends State<TaskEditor> {
                             maxLines: null,
                             maxLength: 200,
                             scrollPadding: const EdgeInsets.only(bottom: 160),
-                            decoration: const InputDecoration(
-                              labelText: '内容',
+                            decoration: InputDecoration(
+                              labelText: localizeUiText(context, '内容'),
                               alignLabelWithHint: true,
                             ),
                           ),
@@ -681,7 +688,7 @@ class _TaskEditorState extends State<TaskEditor> {
                       trailing: readOnly
                           ? null
                           : IconButton(
-                              tooltip: '编辑标签',
+                              tooltip: localizeUiText(context, '编辑标签'),
                               onPressed: () =>
                                   scaffoldKey.currentState?.openEndDrawer(),
                               icon: const Icon(Icons.edit_outlined),
@@ -703,8 +710,8 @@ class _TaskEditorState extends State<TaskEditor> {
                             minLines: 2,
                             maxLines: null,
                             scrollPadding: const EdgeInsets.only(bottom: 160),
-                            decoration: const InputDecoration(
-                              labelText: '未完成主要原因',
+                            decoration: InputDecoration(
+                              labelText: localizeUiText(context, '未完成主要原因'),
                               alignLabelWithHint: true,
                             ),
                           ),
@@ -730,8 +737,8 @@ class _TaskEditorState extends State<TaskEditor> {
                               minLines: 2,
                               maxLines: null,
                               scrollPadding: const EdgeInsets.only(bottom: 160),
-                              decoration: const InputDecoration(
-                                labelText: '追加跟进',
+                              decoration: InputDecoration(
+                                labelText: localizeUiText(context, '追加跟进'),
                                 alignLabelWithHint: true,
                               ),
                             ),
@@ -905,7 +912,7 @@ class _TaskEditorState extends State<TaskEditor> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: IconButton(
-                      tooltip: '关闭',
+                      tooltip: localizeUiText(context, '关闭'),
                       onPressed: () => Navigator.pop(context),
                       icon: const Icon(Icons.close),
                     ),

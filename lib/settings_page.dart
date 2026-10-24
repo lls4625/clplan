@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import 'app_controller.dart';
 import 'contact_widgets.dart';
 import 'developer_tip.dart';
 import 'l10n/l10n.dart';
+import 'l10n/ui_text.dart';
 import 'models.dart';
 import 'notification_service.dart';
 import 'ui/app_alert.dart';
@@ -349,7 +350,7 @@ class SettingsPage extends StatelessWidget {
             '失败 ${controller.failedReminderCount} 个',
           ),
           trailing: IconButton(
-            tooltip: '重新对账',
+            tooltip: localizeUiText(context, '重新对账'),
             onPressed: controller.refreshNotifications,
             icon: const Icon(Icons.refresh),
           ),
@@ -545,8 +546,8 @@ class SettingsPage extends StatelessWidget {
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.view_column_outlined),
-                title: const Text('任务表格列设置'),
-                subtitle: const Text('调整任务表格的显示字段与顺序'),
+                title: const Text('计划表格列设置'),
+                subtitle: const Text('调整计划表格的显示字段与顺序'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _editColumns(context),
               ),
@@ -767,12 +768,11 @@ class SettingsPage extends StatelessWidget {
     }
   }
 
-  void _message(BuildContext context, String text) =>
-      showAppAlert(
-        context,
-        title: '导入失败',
-        message: text.replaceFirst('导入失败：', ''),
-      );
+  void _message(BuildContext context, String text) => showAppAlert(
+    context,
+    title: '导入失败',
+    message: text.replaceFirst('导入失败：', ''),
+  );
 
   Future<void> _editProgressTemplates(BuildContext context) async =>
       Navigator.of(context).push<void>(
@@ -806,15 +806,14 @@ class SettingsPage extends StatelessWidget {
       );
 
   void _showTable(BuildContext context) {
-    const columns = <MapEntry<String, String>>[
-      MapEntry('name', '计划名称'),
-      MapEntry('category', '分类'),
-      MapEntry('progressTemplate', '进度方案'),
-      MapEntry('progressNode', '进度节点'),
-      MapEntry('tags', '标签'),
-      MapEntry('startDate', '开始日期'),
-      MapEntry('targetDate', '目标日期'),
-    ];
+    final visibleColumns = controller.columns
+        .where((column) => column.visible)
+        .toList();
+    final columns = visibleColumns.isEmpty
+        ? controller.columns
+              .where((column) => column.keyName == 'name')
+              .toList()
+        : visibleColumns;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -849,7 +848,7 @@ class SettingsPage extends StatelessWidget {
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
                     columns: columns
-                        .map((column) => DataColumn(label: Text(column.value)))
+                        .map((column) => DataColumn(label: Text(column.label)))
                         .toList(),
                     rows: controller.plans
                         .map(
@@ -857,7 +856,7 @@ class SettingsPage extends StatelessWidget {
                             cells: columns
                                 .map(
                                   (column) => DataCell(
-                                    Text(_planField(plan, column.key)),
+                                    Text(_planField(plan, column.keyName)),
                                   ),
                                 )
                                 .toList(),
@@ -875,16 +874,22 @@ class SettingsPage extends StatelessWidget {
   }
 
   String _planField(PlanItem plan, String key) => switch (key) {
+    'id' => plan.id,
     'name' => plan.name,
+    'description' => plan.description,
     'category' => plan.categoryName,
     'progressTemplate' => plan.progress.templateName,
     'progressNode' => plan.progress.currentNode?.name ?? '',
     'tags' => plan.tags.map((tag) => tag.name).join('，'),
     'startDate' => plan.startDate,
     'targetDate' => plan.targetDate,
+    'contacts' => plan.contacts.map((item) => item.name).join('，'),
+    'calendarDisplayMode' => plan.calendarDisplayMode.label,
+    'reminderEnabled' => plan.reminderEnabled ? '是' : '否',
+    'completedAt' => plan.completedAt?.toLocal().toIso8601String() ?? '',
+    'updatedAt' => plan.updatedAt.toLocal().toIso8601String(),
     _ => '',
   };
-
 }
 
 class _FontSizePage extends StatefulWidget {
@@ -926,11 +931,7 @@ class _FontSizePageState extends State<_FontSizePage> {
       if (!mounted) return;
     } catch (_) {
       if (!mounted) return;
-      showAppAlert(
-        context,
-        title: '保存失败',
-        message: '字体大小保存失败，请重试。',
-      );
+      showAppAlert(context, title: '保存失败', message: '字体大小保存失败，请重试。');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -1419,7 +1420,7 @@ class _ContactCard extends StatelessWidget {
               top: 0,
               right: 0,
               child: IconButton(
-                tooltip: '编辑联系人',
+                tooltip: localizeUiText(context, '编辑联系人'),
                 onPressed: onEdit,
                 icon: const Icon(Icons.edit_outlined),
               ),
@@ -1428,7 +1429,7 @@ class _ContactCard extends StatelessWidget {
               right: 0,
               bottom: 0,
               child: IconButton(
-                tooltip: '删除联系人',
+                tooltip: localizeUiText(context, '删除联系人'),
                 color: colors.error,
                 onPressed: onDelete,
                 icon: const Icon(Icons.delete_outline),
@@ -1624,7 +1625,7 @@ class _CategoryEditor extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  tooltip: '关闭',
+                  tooltip: localizeUiText(context, '关闭'),
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close),
                 ),
@@ -1682,12 +1683,12 @@ class _CategoryEditor extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          tooltip: '编辑分类',
+                          tooltip: localizeUiText(context, '编辑分类'),
                           onPressed: () => _edit(context, category),
                           icon: const Icon(Icons.edit_outlined),
                         ),
                         IconButton(
-                          tooltip: '删除分类',
+                          tooltip: localizeUiText(context, '删除分类'),
                           onPressed: () =>
                               controller.deleteCategoryDefinition(category.id),
                           icon: const Icon(Icons.delete_outline),
@@ -1704,12 +1705,11 @@ class _CategoryEditor extends StatelessWidget {
     ),
   );
 
-  void _showError(BuildContext context, Object exception) =>
-      showAppAlert(
-        context,
-        title: '操作失败',
-        message: exception.toString().replaceFirst('Bad state: ', ''),
-      );
+  void _showError(BuildContext context, Object exception) => showAppAlert(
+    context,
+    title: '操作失败',
+    message: exception.toString().replaceFirst('Bad state: ', ''),
+  );
 
   Future<void> _edit(BuildContext context, CategoryDefinition original) async {
     final name = TextEditingController(text: original.name);
@@ -1728,8 +1728,8 @@ class _CategoryEditor extends StatelessWidget {
                 TextField(
                   controller: name,
                   maxLength: maxCategoryNameLength,
-                  decoration: const InputDecoration(
-                    labelText: '分类名称',
+                  decoration: InputDecoration(
+                    labelText: localizeUiText(context, '分类名称'),
                     counterText: '',
                   ),
                 ),
@@ -1939,12 +1939,11 @@ class _ProgressTemplateEditor extends StatelessWidget {
         ),
       );
 
-  void _showError(BuildContext context, Object exception) =>
-      showAppAlert(
-        context,
-        title: '操作失败',
-        message: exception.toString().replaceFirst('Bad state: ', ''),
-      );
+  void _showError(BuildContext context, Object exception) => showAppAlert(
+    context,
+    title: '操作失败',
+    message: exception.toString().replaceFirst('Bad state: ', ''),
+  );
 }
 
 class _ProgressTemplateCard extends StatelessWidget {
@@ -2008,12 +2007,12 @@ class _ProgressTemplateCard extends StatelessWidget {
                     padding: const EdgeInsets.all(12),
                   ),
                   IconButton(
-                    tooltip: '编辑进度方案',
+                    tooltip: localizeUiText(context, '编辑进度方案'),
                     onPressed: onEdit,
                     icon: const Icon(Icons.edit_outlined),
                   ),
                   IconButton(
-                    tooltip: '删除进度方案',
+                    tooltip: localizeUiText(context, '删除进度方案'),
                     onPressed: onDelete,
                     icon: const Icon(Icons.delete_outline),
                   ),
@@ -2119,7 +2118,10 @@ class _ProgressTemplateFormState extends State<_ProgressTemplateForm> {
         TextField(
           controller: name,
           maxLength: maxProgressTemplateNameLength,
-          decoration: const InputDecoration(labelText: '方案名称', counterText: ''),
+          decoration: InputDecoration(
+            labelText: localizeUiText(context, '方案名称'),
+            counterText: '',
+          ),
         ),
         const SizedBox(height: 22),
         Row(
@@ -2181,7 +2183,7 @@ class _ProgressTemplateFormState extends State<_ProgressTemplateForm> {
                         ),
                       ),
                       IconButton(
-                        tooltip: '删除节点',
+                        tooltip: localizeUiText(context, '删除节点'),
                         onPressed: nodes.length <= 2
                             ? null
                             : () => setState(() => nodes.removeAt(index)),
@@ -2193,8 +2195,8 @@ class _ProgressTemplateFormState extends State<_ProgressTemplateForm> {
                   TextFormField(
                     initialValue: node.name,
                     maxLength: maxProgressNodeNameLength,
-                    decoration: const InputDecoration(
-                      labelText: '节点名称',
+                    decoration: InputDecoration(
+                      labelText: localizeUiText(context, '节点名称'),
                       counterText: '',
                     ),
                     onChanged: (value) =>
@@ -2264,135 +2266,6 @@ class _ProgressTemplateFormState extends State<_ProgressTemplateForm> {
   );
 }
 
-class _StatusEditor extends StatefulWidget {
-  const _StatusEditor({required this.controller});
-  final AppController controller;
-  @override
-  State<_StatusEditor> createState() => _StatusEditorState();
-}
-
-class _StatusEditorState extends State<_StatusEditor> {
-  static const colors = [
-    0xff8c91a3,
-    0xff497fc4,
-    0xffc28a35,
-    0xff3f9875,
-    0xffde583f,
-    0xff8f63c7,
-  ];
-  @override
-  Widget build(BuildContext context) => DraggableScrollableSheet(
-    expand: false,
-    initialChildSize: .78,
-    builder: (context, scroll) => ListView(
-      controller: scroll,
-      padding: const EdgeInsets.all(18),
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                '进度',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-            ),
-            IconButton(
-              onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.close),
-            ),
-          ],
-        ),
-        ...widget.controller.statuses.map(
-          (status) => Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  TextFormField(
-                    initialValue: status.name,
-                    decoration: const InputDecoration(labelText: '名称'),
-                    onFieldSubmitted: (name) => widget.controller.saveStatus(
-                      status.copyWith(
-                        name: name.trim().isEmpty ? status.name : name.trim(),
-                      ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      const Text('颜色'),
-                      const SizedBox(width: 8),
-                      ...colors.map(
-                        (value) => IconButton(
-                          onPressed: () => widget.controller.saveStatus(
-                            status.copyWith(colorValue: value),
-                          ),
-                          icon: Icon(
-                            status.colorValue == value
-                                ? Icons.radio_button_checked
-                                : Icons.circle,
-                            color: Color(value),
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('视为已完成'),
-                          value: status.completed,
-                          onChanged: (value) => widget.controller.saveStatus(
-                            status.copyWith(completed: value),
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: '删除状态',
-                        onPressed: () async {
-                          final deleted = await widget.controller.deleteStatus(
-                            status.id,
-                          );
-                          if (!deleted && context.mounted) {
-                            showAppAlert(
-                              context,
-                              title: '无法删除状态',
-                              message: '正在使用的状态或最后一个状态不能删除。',
-                            );
-                          }
-                        },
-                        icon: const Icon(Icons.delete_outline),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        FilledButton.icon(
-          onPressed: () {
-            final id = 'status-${DateTime.now().microsecondsSinceEpoch}';
-            widget.controller.saveStatus(
-              TaskStatus(
-                id: id,
-                name: '新状态',
-                colorValue: colors.first,
-                completed: false,
-                sortOrder: widget.controller.statuses.length,
-              ),
-            );
-          },
-          icon: const Icon(Icons.add),
-          label: const Text('添加状态'),
-        ),
-      ],
-    ),
-  );
-}
-
 class _TagEditor extends StatefulWidget {
   const _TagEditor({required this.controller});
 
@@ -2456,7 +2329,7 @@ class _TagEditorState extends State<_TagEditor> {
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-                    tooltip: '关闭',
+                    tooltip: localizeUiText(context, '关闭'),
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close),
                   ),
@@ -2537,7 +2410,7 @@ class _TagEditorState extends State<_TagEditor> {
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                tooltip: '编辑标签',
+                tooltip: localizeUiText(context, '编辑标签'),
                 onPressed: () => setState(() {
                   _editingTagIds.add(tag.id);
                   _draftTagNames[tag.id] = tag.name;
@@ -2545,7 +2418,7 @@ class _TagEditorState extends State<_TagEditor> {
                 icon: const Icon(Icons.edit_outlined),
               ),
               IconButton(
-                tooltip: '删除标签配置',
+                tooltip: localizeUiText(context, '删除标签配置'),
                 onPressed: () => _delete(context, tag),
                 icon: const Icon(Icons.delete_outline),
               ),
@@ -2565,7 +2438,9 @@ class _TagEditorState extends State<_TagEditor> {
             Expanded(
               child: tag.isQuadrant
                   ? InputDecorator(
-                      decoration: const InputDecoration(labelText: '标签名称'),
+                      decoration: InputDecoration(
+                        labelText: localizeUiText(context, '标签名称'),
+                      ),
                       child: Row(
                         children: [
                           Expanded(child: Text(tag.name)),
@@ -2577,8 +2452,8 @@ class _TagEditorState extends State<_TagEditor> {
                       key: ValueKey('${tag.id}-${tag.name}'),
                       initialValue: tag.name,
                       maxLength: maxTagNameLength,
-                      decoration: const InputDecoration(
-                        labelText: '标签名称',
+                      decoration: InputDecoration(
+                        labelText: localizeUiText(context, '标签名称'),
                         counterText: '',
                       ),
                       onChanged: (name) => _draftTagNames[tag.id] = name,
@@ -2588,7 +2463,7 @@ class _TagEditorState extends State<_TagEditor> {
             ),
             if (!tag.isQuadrant)
               IconButton(
-                tooltip: '删除标签配置',
+                tooltip: localizeUiText(context, '删除标签配置'),
                 onPressed: () => _delete(context, tag),
                 icon: const Icon(Icons.delete_outline),
               ),
@@ -2605,7 +2480,7 @@ class _TagEditorState extends State<_TagEditor> {
           children: colors
               .map(
                 (value) => IconButton(
-                  tooltip: '选择颜色',
+                  tooltip: localizeUiText(context, '选择颜色'),
                   onPressed: () =>
                       _save(context, tag.copyWith(colorValue: value)),
                   icon: Icon(
@@ -2682,6 +2557,7 @@ class _TagEditorState extends State<_TagEditor> {
       iconName: taskTagIconChoices.keys.first,
       sortOrder: widget.controller.tagDefinitions.length,
     );
+    if (!context.mounted) return;
     final saved = await _save(context, tag);
     if (!saved || !mounted) return;
     setState(() {
@@ -2733,19 +2609,19 @@ class _TagEditorState extends State<_TagEditor> {
         false;
     if (!confirmed) return;
     await widget.controller.deleteTagDefinition(tag.id);
-    if (mounted)
+    if (mounted) {
       setState(() {
         _editingTagIds.remove(tag.id);
         _draftTagNames.remove(tag.id);
       });
+    }
   }
 
-  void _message(BuildContext context, Object exception) =>
-      showAppAlert(
-        context,
-        title: '操作失败',
-        message: exception.toString().replaceFirst('Bad state: ', ''),
-      );
+  void _message(BuildContext context, Object exception) => showAppAlert(
+    context,
+    title: '操作失败',
+    message: exception.toString().replaceFirst('Bad state: ', ''),
+  );
 }
 
 class _ColumnEditor extends StatefulWidget {
@@ -2807,9 +2683,11 @@ class _ColumnEditorState extends State<_ColumnEditor> {
                 secondary: const Icon(Icons.drag_handle),
                 title: Text(column.label),
                 value: column.visible,
-                onChanged: (value) => setState(
-                  () => columns[index] = column.copyWith(visible: value),
-                ),
+                onChanged: column.keyName == 'name'
+                    ? null
+                    : (value) => setState(
+                        () => columns[index] = column.copyWith(visible: value),
+                      ),
               );
             },
           ),
@@ -2844,6 +2722,8 @@ class _ImportPreviewState extends State<_ImportPreview> {
     'calendarDisplayMode',
     'reminderEnabled',
     'reminders',
+    'milestones',
+    'recurrenceRules',
   ];
 
   @override
@@ -2999,9 +2879,7 @@ class _ImportPreviewState extends State<_ImportPreview> {
           : local.categoryIconName,
       tags: _mergedTags(local, remote, selected),
       progress: useRemoteProgress ? remote.progress : local.progress,
-      completedAt: useRemoteProgress
-          ? remote.completedAt
-          : local.completedAt,
+      completedAt: useRemoteProgress ? remote.completedAt : local.completedAt,
       startDate: selected.contains('startDate')
           ? remote.startDate
           : local.startDate,
@@ -3015,8 +2893,10 @@ class _ImportPreviewState extends State<_ImportPreview> {
           ? remote.calendarDisplayMode
           : local.calendarDisplayMode,
       updatedAt: DateTime.now(),
-      milestones: local.milestones,
-      rules: local.rules,
+      milestones: selected.contains('milestones')
+          ? remote.milestones
+          : local.milestones,
+      rules: selected.contains('recurrenceRules') ? remote.rules : local.rules,
       reminderEnabled: selected.contains('reminderEnabled')
           ? remote.reminderEnabled
           : local.reminderEnabled,
@@ -3067,6 +2947,16 @@ class _ImportPreviewState extends State<_ImportPreview> {
     'reminders' =>
       plan.reminders
           .map((item) => '${item.deliveryLabel}·${item.label}')
+          .join('；'),
+    'milestones' =>
+      plan.milestones
+          .map(
+            (item) => '${item.name}@${item.date}${item.completed ? '✓' : ''}',
+          )
+          .join('；'),
+    'recurrenceRules' =>
+      plan.rules
+          .map((item) => '${item.title}@${item.startDate}—${item.endDate}')
           .join('；'),
     _ => '',
   };
@@ -3331,10 +3221,10 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                     controller: keywordController,
                     textInputAction: TextInputAction.search,
                     onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
-                      labelText: '计划关键词',
-                      hintText: '搜索计划名称或内容',
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search),
+                      labelText: localizeUiText(context, '计划关键词'),
+                      hintText: localizeUiText(context, '搜索计划名称或内容'),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -3353,7 +3243,7 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                         children: [
                           if (dateRange != null)
                             IconButton(
-                              tooltip: '清除日期',
+                              tooltip: localizeUiText(context, '清除日期'),
                               onPressed: () => setState(() => dateRange = null),
                               icon: const Icon(Icons.close),
                             ),
@@ -3366,7 +3256,9 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                   const SizedBox(height: 12),
                   DropdownButtonFormField<_PlanExportCompletion>(
                     initialValue: completion,
-                    decoration: const InputDecoration(labelText: '完成状态'),
+                    decoration: InputDecoration(
+                      labelText: localizeUiText(context, '完成状态'),
+                    ),
                     items: const [
                       DropdownMenuItem(
                         value: _PlanExportCompletion.all,
@@ -3389,7 +3281,9 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                   DropdownButtonFormField<String>(
                     key: ValueKey('export-category-$categoryName'),
                     initialValue: categoryName,
-                    decoration: const InputDecoration(labelText: '分类'),
+                    decoration: InputDecoration(
+                      labelText: localizeUiText(context, '分类'),
+                    ),
                     items: [
                       const DropdownMenuItem(value: '', child: Text('全部分类')),
                       ...widget.controller.categoryDefinitions.map(
@@ -3406,7 +3300,9 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                   DropdownButtonFormField<String>(
                     key: ValueKey('export-template-$progressTemplateName'),
                     initialValue: progressTemplateName,
-                    decoration: const InputDecoration(labelText: '进度方案'),
+                    decoration: InputDecoration(
+                      labelText: localizeUiText(context, '进度方案'),
+                    ),
                     items: [
                       const DropdownMenuItem(value: '', child: Text('全部进度方案')),
                       ...templates.map(
@@ -3428,7 +3324,9 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                         'export-node-$progressTemplateName-$progressNodeName',
                       ),
                       initialValue: progressNodeName,
-                      decoration: const InputDecoration(labelText: '进度节点'),
+                      decoration: InputDecoration(
+                        labelText: localizeUiText(context, '进度节点'),
+                      ),
                       items: [
                         const DropdownMenuItem(
                           value: '',
@@ -3647,12 +3545,12 @@ class _ContactExportSheetState extends State<_ContactExportSheet> {
                     onChanged: (_) => setState(() {}),
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search),
-                      labelText: '查询联系人',
-                      hintText: '输入姓名、电话或备注',
+                      labelText: localizeUiText(context, '查询联系人'),
+                      hintText: localizeUiText(context, '输入姓名、电话或备注'),
                       suffixIcon: keyword.isEmpty
                           ? null
                           : IconButton(
-                              tooltip: '清除查询',
+                              tooltip: localizeUiText(context, '清除查询'),
                               onPressed: () {
                                 keywordController.clear();
                                 setState(() {});

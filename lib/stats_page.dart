@@ -1,9 +1,10 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import 'app_controller.dart';
 import 'models.dart';
+import 'l10n/ui_text.dart';
 import 'plan_editor.dart';
 import 'stable_filter_chip.dart';
 import 'task_editor.dart';
@@ -675,7 +676,7 @@ class _StatsPageState extends State<StatsPage>
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
-                        '右侧数字为已完成/总数；${_scopeItemText}可计入多个普通标签。',
+                        '右侧数字为已完成/总数；$_scopeItemText可计入多个普通标签。',
                         style: const TextStyle(fontSize: 11),
                       ),
                     ),
@@ -940,9 +941,9 @@ class _QuadrantCard extends StatelessWidget {
                             completionStyles.contains(
                               PlanCompletionStyle.strikethrough,
                             );
-                        final completedColor = Theme.of(
-                          context,
-                        ).colorScheme.onSurfaceVariant;
+                        final completedColor = Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant;
                         final title = Text(
                           entry.title,
                           textAlign: TextAlign.start,
@@ -1475,7 +1476,7 @@ class StatsFilterDrawer extends StatelessWidget {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: IconButton(
-                        tooltip: '恢复默认条件',
+                        tooltip: localizeUiText(context, '恢复默认条件'),
                         onPressed: () => onChanged(StatCriteria.initial()),
                         icon: const Icon(Icons.restart_alt),
                       ),
@@ -1483,7 +1484,7 @@ class StatsFilterDrawer extends StatelessWidget {
                     Align(
                       alignment: Alignment.centerRight,
                       child: IconButton(
-                        tooltip: '关闭',
+                        tooltip: localizeUiText(context, '关闭'),
                         onPressed: () => Navigator.pop(context),
                         icon: const Icon(Icons.close),
                       ),
@@ -1500,32 +1501,44 @@ class StatsFilterDrawer extends StatelessWidget {
                     '四象限与标签统计对象',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  ...StatScope.values.map(
-                    (scope) => RadioListTile<StatScope>(
-                      value: scope,
-                      groupValue: criteria.scope,
-                      title: Text(scopeLabels[scope]!),
-                      contentPadding: EdgeInsets.zero,
-                      onChanged: (value) {
-                        if (value != null) {
-                          onChanged(criteria.copyWith(scope: value));
-                        }
-                      },
+                  RadioGroup<StatScope>(
+                    groupValue: criteria.scope,
+                    onChanged: (value) {
+                      if (value != null) {
+                        onChanged(criteria.copyWith(scope: value));
+                      }
+                    },
+                    child: Column(
+                      children: StatScope.values
+                          .map(
+                            (scope) => RadioListTile<StatScope>(
+                              value: scope,
+                              title: Text(scopeLabels[scope]!),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          )
+                          .toList(),
                     ),
                   ),
                   const Divider(height: 28),
                   Text('统计周期', style: Theme.of(context).textTheme.titleMedium),
-                  ...StatMode.values.map(
-                    (mode) => RadioListTile<StatMode>(
-                      value: mode,
-                      groupValue: criteria.mode,
-                      title: Text(labels[mode]!),
-                      contentPadding: EdgeInsets.zero,
-                      onChanged: (value) {
-                        if (value != null) {
-                          onChanged(criteria.copyWith(mode: value));
-                        }
-                      },
+                  RadioGroup<StatMode>(
+                    groupValue: criteria.mode,
+                    onChanged: (value) {
+                      if (value != null) {
+                        onChanged(criteria.copyWith(mode: value));
+                      }
+                    },
+                    child: Column(
+                      children: StatMode.values
+                          .map(
+                            (mode) => RadioListTile<StatMode>(
+                              value: mode,
+                              title: Text(labels[mode]!),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          )
+                          .toList(),
                     ),
                   ),
                   if (criteria.mode == StatMode.custom) ...[
@@ -1551,7 +1564,9 @@ class StatsFilterDrawer extends StatelessWidget {
                   DropdownButtonFormField<String>(
                     key: ValueKey('stat-category-${criteria.categoryName}'),
                     initialValue: criteria.categoryName,
-                    decoration: const InputDecoration(labelText: '分类'),
+                    decoration: InputDecoration(
+                      labelText: localizeUiText(context, '分类'),
+                    ),
                     items: [
                       const DropdownMenuItem(value: '', child: Text('全部分类')),
                       ...categories.map(
@@ -1568,7 +1583,9 @@ class StatsFilterDrawer extends StatelessWidget {
                       'stat-template-${criteria.progressTemplateName}',
                     ),
                     initialValue: criteria.progressTemplateName,
-                    decoration: const InputDecoration(labelText: '进度方案'),
+                    decoration: InputDecoration(
+                      labelText: localizeUiText(context, '进度方案'),
+                    ),
                     items: [
                       const DropdownMenuItem(value: '', child: Text('全部进度方案')),
                       ...templates.map(
@@ -1591,7 +1608,9 @@ class StatsFilterDrawer extends StatelessWidget {
                         '${criteria.progressNodeName}',
                       ),
                       initialValue: criteria.progressNodeName,
-                      decoration: const InputDecoration(labelText: '进度节点'),
+                      decoration: InputDecoration(
+                        labelText: localizeUiText(context, '进度节点'),
+                      ),
                       items: [
                         const DropdownMenuItem(
                           value: '',

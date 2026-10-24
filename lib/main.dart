@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'app_controller.dart';
 import 'app_database.dart';
 import 'home_shell.dart';
 import 'l10n/generated/app_localizations.dart';
+import 'l10n/ui_text.dart';
 import 'welcome_page.dart';
 
 Future<void> main() async {
@@ -25,6 +26,31 @@ Future<void> main() async {
 class ClPlanApp extends StatelessWidget {
   const ClPlanApp({super.key, required this.controller});
   final AppController controller;
+
+  Locale _resolveSystemLocale(List<Locale>? locales) {
+    for (final locale in locales ?? const <Locale>[]) {
+      switch (locale.languageCode) {
+        case 'zh':
+          final region = locale.countryCode?.toUpperCase();
+          final traditional =
+              locale.scriptCode == 'Hant' ||
+              region == 'TW' ||
+              region == 'HK' ||
+              region == 'MO';
+          return Locale.fromSubtags(
+            languageCode: 'zh',
+            scriptCode: traditional ? 'Hant' : 'Hans',
+          );
+        case 'ja':
+          return const Locale('ja');
+        case 'ko':
+          return const Locale('ko');
+        case 'en':
+          return const Locale('en');
+      }
+    }
+    return const Locale('en');
+  }
 
   ThemeData _theme(Brightness brightness) {
     const accent = Color(0xffde583f);
@@ -97,13 +123,16 @@ class ClPlanApp extends StatelessWidget {
         'ja' => const Locale('ja'),
         'ko' => const Locale('ko'),
         'en' => const Locale('en'),
-        _ => null,
+        'system' => null,
+        _ => const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
       };
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         title: 'ClPlan',
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
+        localeListResolutionCallback: (locales, _) =>
+            _resolveSystemLocale(locales),
         locale: locale,
         themeMode: mode,
         theme: _theme(Brightness.light),

@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
+
+import 'l10n/ui_text.dart';
 
 class WelcomePage extends StatefulWidget {
   const WelcomePage({super.key, required this.child});
@@ -76,10 +78,8 @@ class _WelcomePageState extends State<WelcomePage> {
                     const SizedBox(height: 28),
                     Text(
                       '计划有序，\n行动从容。',
-                      style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        height: 1.18,
-                      ),
+                      style: Theme.of(context).textTheme.displaySmall
+                          ?.copyWith(fontWeight: FontWeight.w700, height: 1.18),
                     ),
                     const SizedBox(height: 14),
                     Text(
@@ -92,9 +92,8 @@ class _WelcomePageState extends State<WelcomePage> {
                     const Spacer(),
                     Text(
                       '$_secondsRemaining 秒后自动进入',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 22),
                     SizedBox(

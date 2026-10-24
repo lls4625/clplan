@@ -10,10 +10,10 @@ class AppLocalizationsKo extends AppLocalizations {
   AppLocalizationsKo([String locale = 'ko']) : super(locale);
 
   @override
-  String get planningPlanTitle => '智能规划计划';
+  String get planningPlanTitle => '基础规划计划';
 
   @override
-  String get planningTaskTitle => '智能规划任务';
+  String get planningTaskTitle => '基础规划任务';
 
   @override
   String get planningClose => '关闭';

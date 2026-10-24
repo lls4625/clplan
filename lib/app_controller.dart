@@ -1,4 +1,3 @@
-import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 
 import 'app_database.dart';
@@ -43,6 +42,7 @@ class AppController extends ChangeNotifier {
   int inactiveAlarmCount = 0;
   int failedAlarmCount = 0;
   String? pendingTaskToOpen;
+  String? pendingPlanToOpen;
 
   Future<void> initialize() async {
     try {
@@ -289,10 +289,7 @@ class AppController extends ChangeNotifier {
     required double scale,
   }) async {
     final normalizedScale = scale
-        .clamp(
-          AppPreferences.minimumFontScale,
-          AppPreferences.maximumFontScale,
-        )
+        .clamp(AppPreferences.minimumFontScale, AppPreferences.maximumFontScale)
         .toDouble();
     await db.savePreference(
       'follow_system_font_scale',
@@ -735,9 +732,25 @@ class AppController extends ChangeNotifier {
     if (plan.startDate.compareTo(plan.targetDate) > 0) {
       throw StateError('计划开始日期不能晚于目标日期。');
     }
+    for (final milestone in plan.milestones) {
+      if (milestone.name.trim().isEmpty) {
+        throw StateError('里程碑名称不能为空。');
+      }
+      if (milestone.date.compareTo(plan.startDate) < 0 ||
+          milestone.date.compareTo(plan.targetDate) > 0) {
+        throw StateError('里程碑日期必须位于计划日期范围内。');
+      }
+    }
     for (final rule in plan.rules) {
+      if (rule.title.trim().isEmpty) {
+        throw StateError('周期任务名称不能为空。');
+      }
       if (rule.startDate.compareTo(rule.endDate) > 0) {
         throw StateError('重复任务的开始日期不能晚于结束日期。');
+      }
+      if (rule.startDate.compareTo(plan.startDate) < 0 ||
+          rule.endDate.compareTo(plan.targetDate) > 0) {
+        throw StateError('周期任务日期必须位于计划日期范围内。');
       }
     }
     final existing = planById(plan.id);
@@ -780,6 +793,12 @@ class AppController extends ChangeNotifier {
 
   Future<void> refreshNotifications() => _reconcileReminders();
 
+  Future<void> refreshAfterResume() async {
+    await db.materializeRecurringTasks();
+    await reload();
+    await _reconcileReminders();
+  }
+
   Future<bool> requestReminderPermission() async {
     final granted = await notifications.requestPermission();
     await _reconcileReminders();
@@ -803,6 +822,12 @@ class AppController extends ChangeNotifier {
     return value;
   }
 
+  String? takePendingPlanToOpen() {
+    final value = pendingPlanToOpen;
+    pendingPlanToOpen = null;
+    return value;
+  }
+
   Future<void> _reconcileReminders({
     bool requestNotificationPermission = false,
     bool requestAlarmPermission = false,
@@ -812,6 +837,7 @@ class AppController extends ChangeNotifier {
       plans,
       isDone: isDone,
       sound: preferences.reminderSound,
+      language: preferences.language,
       requestPermission: requestNotificationPermission,
     );
     await alarms.reconcileAll(
@@ -851,7 +877,13 @@ class AppController extends ChangeNotifier {
   Future<void> _handleNotificationAction(
     ReminderNotificationAction action,
   ) async {
-    final task = taskById(action.taskId);
+    if (action.ownerType == 'plan') {
+      if (planById(action.ownerId) == null) return;
+      pendingPlanToOpen = action.ownerId;
+      notifyListeners();
+      return;
+    }
+    final task = taskById(action.ownerId);
     if (task == null) return;
     if (action.actionId == NotificationService.completeAction) {
       final end = task.progress?.nodes.firstWhere(
@@ -944,8 +976,9 @@ class AppController extends ChangeNotifier {
       if (parent?.parentTaskId != null) {
         throw StateError('任务“${task.title}”形成了超过一层的嵌套，当前版本不允许导入。');
       }
-      if (task.parentTaskId == task.id)
+      if (task.parentTaskId == task.id) {
         throw StateError('任务“${task.title}”不能关联自身。');
+      }
     }
     final ordered = [...imported]
       ..sort((a, b) {
@@ -978,6 +1011,27 @@ class AppController extends ChangeNotifier {
           plan.targetDate.isNotEmpty &&
           plan.startDate.compareTo(plan.targetDate) > 0) {
         throw StateError('计划“${plan.name}”的开始日期晚于目标日期。');
+      }
+      for (final milestone in plan.milestones) {
+        if (milestone.name.trim().isEmpty) {
+          throw StateError('计划“${plan.name}”存在名称为空的里程碑。');
+        }
+        if (milestone.date.compareTo(plan.startDate) < 0 ||
+            milestone.date.compareTo(plan.targetDate) > 0) {
+          throw StateError('计划“${plan.name}”的里程碑日期超出计划范围。');
+        }
+      }
+      for (final rule in plan.rules) {
+        if (rule.title.trim().isEmpty) {
+          throw StateError('计划“${plan.name}”存在名称为空的周期任务。');
+        }
+        if (rule.startDate.compareTo(rule.endDate) > 0) {
+          throw StateError('计划“${plan.name}”的周期任务开始日期晚于结束日期。');
+        }
+        if (rule.startDate.compareTo(plan.startDate) < 0 ||
+            rule.endDate.compareTo(plan.targetDate) > 0) {
+          throw StateError('计划“${plan.name}”的周期任务日期超出计划范围。');
+        }
       }
     }
     for (final plan in imported) {

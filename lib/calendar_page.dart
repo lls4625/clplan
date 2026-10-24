@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import 'app_controller.dart';
 import 'models.dart';
+import 'l10n/ui_text.dart';
 import 'plan_editor.dart';
 import 'plan_widgets.dart';
 import 'task_widgets.dart';
@@ -16,9 +17,8 @@ const double _weeklyBottomExtent = 24;
 const double _weeklyCardSpacing = 10;
 const int _weeklyCardRowCount = 4;
 
-class _CalendarScrollController extends ScrollController {
-  _CalendarScrollController({double initialScrollOffset = 0})
-    : super(initialScrollOffset: initialScrollOffset);
+class CalendarScrollController extends ScrollController {
+  CalendarScrollController({super.initialScrollOffset});
 
   bool _userScrollLocked = false;
 
@@ -66,21 +66,16 @@ class _CalendarScrollController extends ScrollController {
 
 class _CalendarScrollPosition extends ScrollPositionWithSingleContext {
   _CalendarScrollPosition({
-    required ScrollPhysics physics,
-    required ScrollContext context,
-    double? initialPixels,
-    bool keepScrollOffset = true,
+    required super.physics,
+    required super.context,
+    super.initialPixels,
+    super.keepScrollOffset,
+    // Kept explicit because the previous position is also consumed below.
+    // ignore: use_super_parameters
     ScrollPosition? oldPosition,
-    String? debugLabel,
+    super.debugLabel,
     required bool userScrollLocked,
-  }) : super(
-         physics: physics,
-         context: context,
-         initialPixels: initialPixels,
-         keepScrollOffset: keepScrollOffset,
-         oldPosition: oldPosition,
-         debugLabel: debugLabel,
-       ) {
+  }) : super(oldPosition: oldPosition) {
     _userScrollLocked = userScrollLocked;
     if (oldPosition is _CalendarScrollPosition) {
       pendingPixels = oldPosition.pendingPixels;
@@ -183,7 +178,7 @@ class CalendarPageState extends State<CalendarPage>
   double? handoffPointerY;
   bool handoffMoved = false;
   int pinchSessionGeneration = 0;
-  late final _CalendarScrollController scroll;
+  late final CalendarScrollController scroll;
   final listKey = GlobalKey();
   final todayKey = GlobalKey();
   final monthKeys = List.generate(12, (_) => GlobalKey());
@@ -199,10 +194,9 @@ class CalendarPageState extends State<CalendarPage>
     visibleMonth = now.month;
     rowHeight = widget.controller.preferences.calendarRowHeight;
     preferenceHeightSeen = rowHeight;
-    weeklyCardHeight =
-        widget.controller.preferences.calendarWeeklyCardHeight;
+    weeklyCardHeight = widget.controller.preferences.calendarWeeklyCardHeight;
     weeklyPreferenceHeightSeen = weeklyCardHeight;
-    scroll = _CalendarScrollController(
+    scroll = CalendarScrollController(
       initialScrollOffset: _monthRowOffsetForDate(now),
     );
     scroll.addListener(_syncVisibleMonth);
@@ -363,10 +357,7 @@ class CalendarPageState extends State<CalendarPage>
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) => weeklyCardView
-                ? _buildZoomableWeeklyCalendar(
-                    selected,
-                    constraints.maxHeight,
-                  )
+                ? _buildZoomableWeeklyCalendar(selected, constraints.maxHeight)
                 : _buildZoomableMonthCalendar(selected),
           ),
         ),
@@ -390,10 +381,7 @@ class CalendarPageState extends State<CalendarPage>
     );
   }
 
-  Widget _buildZoomableWeeklyCalendar(
-    String selected,
-    double viewportHeight,
-  ) {
+  Widget _buildZoomableWeeklyCalendar(String selected, double viewportHeight) {
     weeklyMinimumCardHeight =
         (viewportHeight -
                 _weeklyTitleExtent -
@@ -415,8 +403,7 @@ class CalendarPageState extends State<CalendarPage>
 
     final firstWeekStart = _startOfWeek(DateTime(year));
     final lastWeekStart = _startOfWeek(DateTime(year, 12, 31));
-    final weekCount =
-        lastWeekStart.difference(firstWeekStart).inDays ~/ 7 + 1;
+    final weekCount = lastWeekStart.difference(firstWeekStart).inDays ~/ 7 + 1;
     final calendar = CustomScrollView(
       key: listKey,
       controller: scroll,
@@ -527,9 +514,8 @@ class CalendarPageState extends State<CalendarPage>
           .floor()
           .clamp(0, _weekCountForYear(year) - 1)
           .toInt();
-      final visibleDate = _startOfWeek(
-        DateTime(year),
-      ).add(Duration(days: weekIndex * 7));
+      final visibleDate = _startOfWeek(DateTime(year))
+          .add(Duration(days: weekIndex * 7));
       if (visibleDate.month != visibleMonth) {
         setState(() => visibleMonth = visibleDate.month);
       }
@@ -592,7 +578,7 @@ class CalendarPageState extends State<CalendarPage>
         handoffPointerY = remainingPointer.value.dy;
       }
     }
-    if (!scalePointers.isEmpty) return;
+    if (scalePointers.isNotEmpty) return;
     handoffPointer = null;
     handoffPointerY = null;
     _completeScaleComputation();
@@ -941,14 +927,11 @@ class CalendarPageState extends State<CalendarPage>
       final targetOffset = anchorDocumentY - focalY;
       scroll.correctToOnNextDimensions(targetOffset);
       final nextWeekExtent = _weeklyExtentForCardHeight(height);
-      final weekIndex = (targetOffset < 0
-              ? 0
-              : targetOffset ~/ nextWeekExtent)
+      final weekIndex = (targetOffset < 0 ? 0 : targetOffset ~/ nextWeekExtent)
           .clamp(0, _weekCountForYear(year) - 1)
           .toInt();
-      final visibleDate = _startOfWeek(
-        DateTime(year),
-      ).add(Duration(days: weekIndex * 7));
+      final visibleDate = _startOfWeek(DateTime(year))
+          .add(Duration(days: weekIndex * 7));
       setState(() {
         weeklyCardHeight = height;
         weeklyWeekExtent = nextWeekExtent;
@@ -993,10 +976,7 @@ class CalendarPageState extends State<CalendarPage>
     return 12;
   }
 
-  double _monthOffsetForDate(
-    DateTime date, {
-    required double alignment,
-  }) {
+  double _monthOffsetForDate(DateTime date, {required double alignment}) {
     final targetOffset = _monthRowOffsetForDate(date);
     final viewportExtent = scroll.position.viewportDimension;
     return targetOffset - (viewportExtent - rowHeight) * alignment;
@@ -1080,10 +1060,12 @@ class CalendarPageState extends State<CalendarPage>
     final generation = ++revealGeneration;
     for (var attempt = 0; attempt < 30; attempt++) {
       await WidgetsBinding.instance.endOfFrame;
-      if (!mounted || !scroll.hasClients || generation != revealGeneration)
+      if (!mounted || !scroll.hasClients || generation != revealGeneration) {
         return;
+      }
       final targetContext = targetKey.currentContext;
       if (targetContext != null) {
+        if (!targetContext.mounted) continue;
         await Scrollable.ensureVisible(
           targetContext,
           duration: animate ? const Duration(milliseconds: 240) : Duration.zero,
@@ -1149,9 +1131,8 @@ class _WeeklyCardCalendar extends StatelessWidget {
               alignment: Alignment.topLeft,
               child: Text(
                 '${weekStart.month}月${weekStart.day}日 — ${weekEnd.month}月${weekEnd.day}日',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w800),
               ),
             ),
           ),
@@ -1237,9 +1218,7 @@ class _WeeklyDayCardState extends State<_WeeklyDayCard> {
   Widget build(BuildContext context) {
     final plans =
         widget.controller.plans
-            .where(
-              (plan) => _planIncludesDate(plan, dateOnly(widget.date)),
-            )
+            .where((plan) => _planIncludesDate(plan, dateOnly(widget.date)))
             .toList()
           ..sort((a, b) => a.name.compareTo(b.name));
     final incomplete = plans.where((plan) => !plan.progress.completed).length;
@@ -1312,14 +1291,12 @@ class _WeeklyDayCardState extends State<_WeeklyDayCard> {
                         final textStyle =
                             Theme.of(context).textTheme.bodySmall ??
                             DefaultTextStyle.of(context).style;
-                        final scaledFontSize = MediaQuery.textScalerOf(
-                          context,
-                        ).scale(textStyle.fontSize ?? 12);
+                        final scaledFontSize = MediaQuery.textScalerOf(context)
+                            .scale(textStyle.fontSize ?? 12);
                         final lineHeight =
                             scaledFontSize * (textStyle.height ?? 1.2);
                         final contentHeight =
-                            plans.length * lineHeight +
-                            (plans.length - 1) * 3;
+                            plans.length * lineHeight + (plans.length - 1) * 3;
                         final canScroll =
                             contentHeight > constraints.maxHeight + .5;
                         return ListView.separated(
@@ -1330,8 +1307,7 @@ class _WeeklyDayCardState extends State<_WeeklyDayCard> {
                               ? const NeverScrollableScrollPhysics()
                               : const ClampingScrollPhysics(),
                           itemCount: plans.length,
-                          separatorBuilder: (_, _) =>
-                              const SizedBox(height: 3),
+                          separatorBuilder: (_, _) => const SizedBox(height: 3),
                           itemBuilder: (context, index) {
                             final plan = plans[index];
                             final completed = plan.progress.completed;
@@ -1386,8 +1362,9 @@ class _WeeklyDayCardState extends State<_WeeklyDayCard> {
                                                   .withAlpha(120),
                                               width: .8,
                                             ),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
                                           )
                                         : null,
                                     child: _CalendarPlanLabel(
@@ -1423,9 +1400,9 @@ int _monthWeekCount(int year, int month) {
 }
 
 int _weekCountForYear(int year) =>
-    _startOfWeek(
-      DateTime(year, 12, 31),
-    ).difference(_startOfWeek(DateTime(year))).inDays ~/
+    _startOfWeek(DateTime(year, 12, 31))
+            .difference(_startOfWeek(DateTime(year)))
+            .inDays ~/
         7 +
     1;
 
@@ -1642,10 +1619,7 @@ class _CalendarPlanLabel extends StatelessWidget {
       label: plan.name,
       value: completed ? '已完成' : '未完成',
       child: ExcludeSemantics(
-        child: Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: label,
-        ),
+        child: Align(alignment: AlignmentDirectional.centerStart, child: label),
       ),
     );
   }
@@ -1671,7 +1645,7 @@ class CalendarDayPage extends StatelessWidget {
         title: Text('${date.month}月${date.day}日'),
         actions: [
           IconButton(
-            tooltip: '新增计划',
+            tooltip: localizeUiText(context, '新增计划'),
             onPressed: () =>
                 showPlanEditor(context, controller, initialDate: dateText),
             icon: const Icon(Icons.add),

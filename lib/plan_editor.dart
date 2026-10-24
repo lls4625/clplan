@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import 'app_controller.dart';
 import 'contact_widgets.dart';
 import 'models.dart';
+import 'l10n/ui_text.dart';
 import 'planning/planning_models.dart';
 import 'planning/widgets/planning_composer.dart';
 import 'reminder_form_widgets.dart';
@@ -76,6 +77,8 @@ class _PlanEditorState extends State<PlanEditor> {
   late bool reminderEnabled;
   late String categoryName;
   late ProgressSnapshot progress;
+  late final List<PlanMilestone> milestones;
+  late final List<RecurrenceRule> recurrenceRules;
   late final Set<String> selectedTags;
   late final List<ContactEntry> selectedContacts;
   bool saving = false;
@@ -103,6 +106,8 @@ class _PlanEditorState extends State<PlanEditor> {
     progress =
         plan?.progress ??
         widget.controller.progressSnapshot('plan-progress-$id');
+    milestones = [...?plan?.milestones];
+    recurrenceRules = [...?plan?.rules];
     selectedTags = {...?plan?.tags.map((tag) => tag.name), ...?draft?.tags};
     selectedContacts = [...?plan?.contacts];
   }
@@ -138,7 +143,7 @@ class _PlanEditorState extends State<PlanEditor> {
         actions: [
           if (plan != null)
             PopupMenuButton<String>(
-              tooltip: '更多操作',
+              tooltip: localizeUiText(context, '更多操作'),
               enabled: !saving,
               onSelected: (value) {
                 if (value == 'delete') _delete();
@@ -193,8 +198,8 @@ class _PlanEditorState extends State<PlanEditor> {
                           controller: name,
                           maxLength: 100,
                           textInputAction: TextInputAction.next,
-                          decoration: const InputDecoration(
-                            labelText: '计划名称',
+                          decoration: InputDecoration(
+                            labelText: localizeUiText(context, '计划名称'),
                             alignLabelWithHint: true,
                           ),
                           validator: (value) =>
@@ -205,8 +210,8 @@ class _PlanEditorState extends State<PlanEditor> {
                           maxLength: 200,
                           minLines: 3,
                           maxLines: null,
-                          decoration: const InputDecoration(
-                            labelText: '计划内容',
+                          decoration: InputDecoration(
+                            labelText: localizeUiText(context, '计划内容'),
                             alignLabelWithHint: true,
                           ),
                         ),
@@ -243,6 +248,97 @@ class _PlanEditorState extends State<PlanEditor> {
                           onTap: _showCalendarDisplayPicker,
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 16),
+                    WorkFormSection(
+                      title: '里程碑',
+                      icon: Icons.flag_outlined,
+                      subtitle:
+                          '${milestones.where((item) => item.completed).length}/${milestones.length} 已完成',
+                      trailing: IconButton.filledTonal(
+                        tooltip: localizeUiText(context, '新增里程碑'),
+                        onPressed: _editMilestone,
+                        icon: const Icon(Icons.add),
+                      ),
+                      children: milestones
+                          .map(
+                            (item) => ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Checkbox(
+                                value: item.completed,
+                                onChanged: (value) => setState(() {
+                                  final index = milestones.indexOf(item);
+                                  milestones[index] = PlanMilestone(
+                                    id: item.id,
+                                    name: item.name,
+                                    date: item.date,
+                                    description: item.description,
+                                    completed: value ?? false,
+                                    sortOrder: item.sortOrder,
+                                  );
+                                }),
+                              ),
+                              title: Text(item.name),
+                              subtitle: Text(
+                                [item.date, item.description]
+                                    .where((value) => value.isNotEmpty)
+                                    .join(' · '),
+                              ),
+                              onTap: () => _editMilestone(item),
+                              trailing: IconButton(
+                                tooltip: localizeUiText(context, '删除里程碑'),
+                                onPressed: () => setState(() {
+                                  milestones.remove(item);
+                                  _normalizeMilestones();
+                                }),
+                                icon: const Icon(Icons.delete_outline),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    WorkFormSection(
+                      title: '周期任务',
+                      icon: Icons.repeat,
+                      subtitle:
+                          '${recurrenceRules.where((item) => item.enabled).length} 条已启用',
+                      trailing: IconButton.filledTonal(
+                        tooltip: localizeUiText(context, '新增周期任务'),
+                        onPressed: _editRecurrenceRule,
+                        icon: const Icon(Icons.add),
+                      ),
+                      children: recurrenceRules
+                          .map(
+                            (rule) => SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: rule.enabled,
+                              title: Text(rule.title),
+                              subtitle: Text(_recurrenceSummary(context, rule)),
+                              onChanged: (value) => setState(() {
+                                final index = recurrenceRules.indexOf(rule);
+                                recurrenceRules[index] = RecurrenceRule(
+                                  id: rule.id,
+                                  planId: rule.planId,
+                                  title: rule.title,
+                                  description: rule.description,
+                                  startDate: rule.startDate,
+                                  endDate: rule.endDate,
+                                  startTime: rule.startTime,
+                                  weekdays: rule.weekdays,
+                                  enabled: value,
+                                  progress: rule.progress,
+                                );
+                              }),
+                              secondary: IconButton(
+                                tooltip: localizeUiText(context, '编辑周期任务'),
+                                onPressed: () => _editRecurrenceRule(rule),
+                                icon: const Icon(Icons.edit_outlined),
+                              ),
+                              controlAffinity: ListTileControlAffinity.trailing,
+                            ),
+                          )
+                          .toList(),
                     ),
                     const SizedBox(height: 16),
                     ReminderFormSection(
@@ -361,7 +457,7 @@ class _PlanEditorState extends State<PlanEditor> {
                           ? '未选择'
                           : '${selectedTags.length} 个标签',
                       trailing: IconButton(
-                        tooltip: '编辑标签',
+                        tooltip: localizeUiText(context, '编辑标签'),
                         onPressed: () =>
                             scaffoldKey.currentState?.openEndDrawer(),
                         icon: const Icon(Icons.edit_outlined),
@@ -377,7 +473,7 @@ class _PlanEditorState extends State<PlanEditor> {
                         icon: Icons.checklist_outlined,
                         subtitle: '$taskCompleted/${tasks.length} 已完成',
                         trailing: IconButton.filledTonal(
-                          tooltip: '新增任务',
+                          tooltip: localizeUiText(context, '新增任务'),
                           onPressed: () => _addTask(plan),
                           icon: const Icon(Icons.add),
                         ),
@@ -535,6 +631,360 @@ class _PlanEditorState extends State<PlanEditor> {
     setState(() => calendarDisplayMode = selected);
   }
 
+  Future<void> _editMilestone([PlanMilestone? existing]) async {
+    final title = TextEditingController(text: existing?.name ?? '');
+    final details = TextEditingController(text: existing?.description ?? '');
+    var date = existing?.date ?? targetDate;
+    final form = GlobalKey<FormState>();
+    final result = await showDialog<PlanMilestone>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(existing == null ? '新增里程碑' : '编辑里程碑'),
+          content: Form(
+            key: form,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: title,
+                    maxLength: 100,
+                    decoration: InputDecoration(
+                      labelText: localizeUiText(dialogContext, '名称'),
+                    ),
+                    validator: (value) =>
+                        (value ?? '').trim().isEmpty ? '请输入里程碑名称' : null,
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('日期'),
+                    subtitle: Text(date),
+                    trailing: const Icon(Icons.calendar_month_outlined),
+                    onTap: () async {
+                      final selected = await showDatePicker(
+                        context: dialogContext,
+                        initialDate: _withinPlanRange(dateFromText(date)),
+                        firstDate: dateFromText(startDate),
+                        lastDate: dateFromText(targetDate),
+                      );
+                      if (selected != null) {
+                        setDialogState(() => date = dateOnly(selected));
+                      }
+                    },
+                  ),
+                  TextFormField(
+                    controller: details,
+                    maxLength: 200,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      labelText: localizeUiText(dialogContext, '说明'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (!(form.currentState?.validate() ?? false)) return;
+                Navigator.pop(
+                  dialogContext,
+                  PlanMilestone(
+                    id:
+                        existing?.id ??
+                        'milestone-${DateTime.now().microsecondsSinceEpoch}',
+                    name: title.text.trim(),
+                    date: date,
+                    description: details.text.trim(),
+                    completed: existing?.completed ?? false,
+                    sortOrder: existing?.sortOrder ?? milestones.length,
+                  ),
+                );
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    title.dispose();
+    details.dispose();
+    if (!mounted || result == null) return;
+    setState(() {
+      final index = existing == null ? -1 : milestones.indexOf(existing);
+      if (index < 0) {
+        milestones.add(result);
+      } else {
+        milestones[index] = result;
+      }
+      _normalizeMilestones();
+    });
+  }
+
+  void _normalizeMilestones() {
+    for (var index = 0; index < milestones.length; index++) {
+      final item = milestones[index];
+      milestones[index] = PlanMilestone(
+        id: item.id,
+        name: item.name,
+        date: item.date,
+        description: item.description,
+        completed: item.completed,
+        sortOrder: index,
+      );
+    }
+  }
+
+  Future<void> _editRecurrenceRule([RecurrenceRule? existing]) async {
+    final title = TextEditingController(text: existing?.title ?? '');
+    final details = TextEditingController(text: existing?.description ?? '');
+    var ruleStart = existing?.startDate ?? startDate;
+    var ruleEnd = existing?.endDate ?? targetDate;
+    var time = existing?.startTime ?? '';
+    var weekdays = {...?existing?.weekdays};
+    final form = GlobalKey<FormState>();
+    final result = await showDialog<_RecurrenceEditResult>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(existing == null ? '新增周期任务' : '编辑周期任务'),
+          content: Form(
+            key: form,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextFormField(
+                    controller: title,
+                    maxLength: 100,
+                    decoration: InputDecoration(
+                      labelText: localizeUiText(dialogContext, '任务名称'),
+                    ),
+                    validator: (value) =>
+                        (value ?? '').trim().isEmpty ? '请输入任务名称' : null,
+                  ),
+                  TextFormField(
+                    controller: details,
+                    maxLength: 200,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      labelText: localizeUiText(dialogContext, '任务内容'),
+                    ),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('开始日期'),
+                    subtitle: Text(ruleStart),
+                    onTap: () async {
+                      final selected = await showDatePicker(
+                        context: dialogContext,
+                        initialDate: _withinPlanRange(dateFromText(ruleStart)),
+                        firstDate: dateFromText(startDate),
+                        lastDate: dateFromText(targetDate),
+                      );
+                      if (selected != null) {
+                        setDialogState(() {
+                          ruleStart = dateOnly(selected);
+                          if (ruleEnd.compareTo(ruleStart) < 0) {
+                            ruleEnd = ruleStart;
+                          }
+                        });
+                      }
+                    },
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('结束日期'),
+                    subtitle: Text(ruleEnd),
+                    onTap: () async {
+                      final selected = await showDatePicker(
+                        context: dialogContext,
+                        initialDate:
+                            dateFromText(ruleEnd)
+                                .isBefore(dateFromText(ruleStart))
+                            ? dateFromText(ruleStart)
+                            : _withinPlanRange(dateFromText(ruleEnd)),
+                        firstDate: dateFromText(ruleStart),
+                        lastDate: dateFromText(targetDate),
+                      );
+                      if (selected != null) {
+                        setDialogState(() => ruleEnd = dateOnly(selected));
+                      }
+                    },
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('时间'),
+                    subtitle: Text(time.isEmpty ? '未设置' : time),
+                    trailing: time.isEmpty
+                        ? const Icon(Icons.schedule_outlined)
+                        : IconButton(
+                            tooltip: localizeUiText(dialogContext, '清除时间'),
+                            onPressed: () => setDialogState(() => time = ''),
+                            icon: const Icon(Icons.clear),
+                          ),
+                    onTap: () async {
+                      final parts = time.split(':');
+                      final selected = await showTimePicker(
+                        context: dialogContext,
+                        initialTime: parts.length == 2
+                            ? TimeOfDay(
+                                hour: int.tryParse(parts[0]) ?? 9,
+                                minute: int.tryParse(parts[1]) ?? 0,
+                              )
+                            : const TimeOfDay(hour: 9, minute: 0),
+                      );
+                      if (selected != null) {
+                        setDialogState(
+                          () => time =
+                              '${selected.hour.toString().padLeft(2, '0')}:${selected.minute.toString().padLeft(2, '0')}',
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('重复日期'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: List.generate(7, (index) {
+                      final weekday = index + 1;
+                      const labels = ['一', '二', '三', '四', '五', '六', '日'];
+                      return FilterChip(
+                        label: Text(labels[index]),
+                        selected: weekdays.contains(weekday),
+                        onSelected: (selected) => setDialogState(() {
+                          selected
+                              ? weekdays.add(weekday)
+                              : weekdays.remove(weekday);
+                        }),
+                      );
+                    }),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            if (existing != null)
+              TextButton(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  const _RecurrenceEditResult(delete: true),
+                ),
+                child: const Text('删除'),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (!(form.currentState?.validate() ?? false)) return;
+                final id =
+                    existing?.id ??
+                    'recurrence-${DateTime.now().microsecondsSinceEpoch}';
+                final ruleProgress =
+                    existing?.progress ??
+                    widget.controller.progressSnapshot(
+                      'rule-progress-$id',
+                      templateId: progress.sourceTemplateId,
+                    );
+                Navigator.pop(
+                  dialogContext,
+                  _RecurrenceEditResult(
+                    rule: RecurrenceRule(
+                      id: id,
+                      planId: widget.plan?.id ?? 'draft-plan',
+                      title: title.text.trim(),
+                      description: details.text.trim(),
+                      startDate: ruleStart,
+                      endDate: ruleEnd,
+                      startTime: time,
+                      weekdays: weekdays,
+                      enabled: existing?.enabled ?? true,
+                      progress: ruleProgress,
+                    ),
+                  ),
+                );
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    title.dispose();
+    details.dispose();
+    if (!mounted || result == null) return;
+    setState(() {
+      if (result.delete) {
+        recurrenceRules.remove(existing);
+        return;
+      }
+      final rule = result.rule!;
+      final index = existing == null ? -1 : recurrenceRules.indexOf(existing);
+      if (index < 0) {
+        recurrenceRules.add(rule);
+      } else {
+        recurrenceRules[index] = rule;
+      }
+    });
+  }
+
+  String _recurrenceSummary(BuildContext context, RecurrenceRule rule) {
+    final language = Localizations.localeOf(context).languageCode;
+    final labels = switch (language) {
+      'en' => const {
+        1: 'Mon',
+        2: 'Tue',
+        3: 'Wed',
+        4: 'Thu',
+        5: 'Fri',
+        6: 'Sat',
+        7: 'Sun',
+      },
+      'ja' => const {1: '月', 2: '火', 3: '水', 4: '木', 5: '金', 6: '土', 7: '日'},
+      'ko' => const {1: '월', 2: '화', 3: '수', 4: '목', 5: '금', 6: '토', 7: '일'},
+      _ => const {1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六', 7: '日'},
+    };
+    final orderedDays = (rule.weekdays.toList()..sort())
+        .map((day) => labels[day])
+        .join(language == 'en' || language == 'ko' ? ', ' : '、');
+    final days = rule.weekdays.isEmpty
+        ? switch (language) {
+            'en' => 'Every day',
+            'ja' => '毎日',
+            'ko' => '매일',
+            _ => '每天',
+          }
+        : switch (language) {
+            'ja' => '$orderedDays曜日',
+            'ko' => orderedDays,
+            'en' => orderedDays,
+            _ => '周$orderedDays',
+          };
+    return '${rule.startDate} — ${rule.endDate} · $days${rule.startTime.isEmpty ? '' : ' · ${rule.startTime}'}';
+  }
+
+  DateTime _withinPlanRange(DateTime value) {
+    final minimum = dateFromText(startDate);
+    final maximum = dateFromText(targetDate);
+    if (value.isBefore(minimum)) return minimum;
+    if (value.isAfter(maximum)) return maximum;
+    return value;
+  }
+
   Future<void> _addPlanReminder(ReminderDeliveryType deliveryType) async {
     final absolute = await showReminderDateTimePicker(
       context,
@@ -673,7 +1123,7 @@ class _PlanEditorState extends State<PlanEditor> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: IconButton(
-                      tooltip: '关闭',
+                      tooltip: localizeUiText(context, '关闭'),
                       onPressed: () => Navigator.pop(context),
                       icon: const Icon(Icons.close),
                     ),
@@ -789,9 +1239,10 @@ class _PlanEditorState extends State<PlanEditor> {
         categoryIconName: category?.iconName ?? 'project',
         tags: tags,
         progress: progress,
-        milestones: old?.milestones ?? const [],
-        rules: old?.rules ?? const [],
+        milestones: List.of(milestones),
+        rules: List.of(recurrenceRules),
         updatedAt: now,
+        completedAt: progress.completed ? old?.completedAt ?? now : null,
         calendarDisplayMode: calendarDisplayMode,
         reminderEnabled: reminderEnabled && reminders.isNotEmpty,
         reminders: List.of(reminders),
@@ -866,4 +1317,11 @@ class _PlanEditorState extends State<PlanEditor> {
 
   void _message(String text) =>
       showAppAlert(context, title: '无法完成操作', message: text);
+}
+
+class _RecurrenceEditResult {
+  const _RecurrenceEditResult({this.rule, this.delete = false});
+
+  final RecurrenceRule? rule;
+  final bool delete;
 }

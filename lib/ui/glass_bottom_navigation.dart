@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'app_ui_features.dart';
+import '../l10n/ui_text.dart';
 
 class AppBottomNavigation extends StatelessWidget {
   const AppBottomNavigation({
@@ -23,26 +24,26 @@ class AppBottomNavigation extends StatelessWidget {
         selectedIndex: selectedIndex,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         onDestinationSelected: onSelected,
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month),
-            label: '日历',
+            icon: const Icon(Icons.calendar_month_outlined),
+            selectedIcon: const Icon(Icons.calendar_month),
+            label: localizeUiText(context, '日历'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.task_alt_outlined),
-            selectedIcon: Icon(Icons.task_alt),
-            label: '计划',
+            icon: const Icon(Icons.task_alt_outlined),
+            selectedIcon: const Icon(Icons.task_alt),
+            label: localizeUiText(context, '计划'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.bar_chart_outlined),
-            selectedIcon: Icon(Icons.bar_chart),
-            label: '统计',
+            icon: const Icon(Icons.bar_chart_outlined),
+            selectedIcon: const Icon(Icons.bar_chart),
+            label: localizeUiText(context, '统计'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.tune_outlined),
-            selectedIcon: Icon(Icons.tune),
-            label: '设置',
+            icon: const Icon(Icons.tune_outlined),
+            selectedIcon: const Icon(Icons.tune),
+            label: localizeUiText(context, '设置'),
           ),
         ],
       );
@@ -57,11 +58,23 @@ class AppBottomNavigation extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.only(top: 8),
         child: GlassTabBar.bottom(
-          tabs: const [
-            GlassTab(icon: Icon(Icons.calendar_month_outlined), label: '日历'),
-            GlassTab(icon: Icon(Icons.task_alt_outlined), label: '计划'),
-            GlassTab(icon: Icon(Icons.bar_chart_outlined), label: '统计'),
-            GlassTab(icon: Icon(Icons.tune_outlined), label: '设置'),
+          tabs: [
+            GlassTab(
+              icon: const Icon(Icons.calendar_month_outlined),
+              label: localizeUiText(context, '日历'),
+            ),
+            GlassTab(
+              icon: const Icon(Icons.task_alt_outlined),
+              label: localizeUiText(context, '计划'),
+            ),
+            GlassTab(
+              icon: const Icon(Icons.bar_chart_outlined),
+              label: localizeUiText(context, '统计'),
+            ),
+            GlassTab(
+              icon: const Icon(Icons.tune_outlined),
+              label: localizeUiText(context, '设置'),
+            ),
           ],
           selectedIndex: selectedIndex,
           onTabSelected: onSelected,

@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import 'app_controller.dart';
 import 'models.dart';
+import 'l10n/ui_text.dart';
 import 'plan_widgets.dart';
 import 'stable_filter_chip.dart';
 import 'task_editor.dart';
@@ -200,8 +201,7 @@ class _PlansPageState extends State<PlansPage> {
                     .toList(),
                 selected: {widget.filter},
                 showSelectedIcon: false,
-                onSelectionChanged: (selected) =>
-                    _selectFilter(selected.first),
+                onSelectionChanged: (selected) => _selectFilter(selected.first),
               ),
             ),
           ),
@@ -395,7 +395,7 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: IconButton(
-                        tooltip: '恢复默认条件',
+                        tooltip: localizeUiText(context, '恢复默认条件'),
                         onPressed: () {
                           _planController.clear();
                           _taskController.clear();
@@ -407,7 +407,7 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: IconButton(
-                        tooltip: '关闭',
+                        tooltip: localizeUiText(context, '关闭'),
                         onPressed: () => Navigator.pop(context),
                         icon: const Icon(Icons.close),
                       ),
@@ -426,9 +426,9 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                     onChanged: (value) => widget.onChanged(
                       widget.criteria.copyWith(planKeyword: value),
                     ),
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
-                      labelText: '计划名称',
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search),
+                      labelText: localizeUiText(context, '计划名称'),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -438,9 +438,9 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                     onChanged: (value) => widget.onChanged(
                       widget.criteria.copyWith(taskKeyword: value),
                     ),
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.task_alt_outlined),
-                      labelText: '任务名称',
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.task_alt_outlined),
+                      labelText: localizeUiText(context, '任务名称'),
                     ),
                   ),
                   const Divider(height: 30),
@@ -452,7 +452,9 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                         child: DropdownButtonFormField<int>(
                           key: ValueKey('plan-year-${widget.criteria.year}'),
                           initialValue: widget.criteria.year,
-                          decoration: const InputDecoration(labelText: '年度'),
+                          decoration: InputDecoration(
+                            labelText: localizeUiText(context, '年度'),
+                          ),
                           items: years
                               .map(
                                 (year) => DropdownMenuItem(
@@ -475,7 +477,9 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                         child: DropdownButtonFormField<int>(
                           key: ValueKey('plan-month-${widget.criteria.month}'),
                           initialValue: widget.criteria.month,
-                          decoration: const InputDecoration(labelText: '月份'),
+                          decoration: InputDecoration(
+                            labelText: localizeUiText(context, '月份'),
+                          ),
                           items: List.generate(
                             12,
                             (index) => DropdownMenuItem(
@@ -500,7 +504,9 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                       'plan-category-${widget.criteria.categoryName}',
                     ),
                     initialValue: widget.criteria.categoryName,
-                    decoration: const InputDecoration(labelText: '分类'),
+                    decoration: InputDecoration(
+                      labelText: localizeUiText(context, '分类'),
+                    ),
                     items: [
                       const DropdownMenuItem(value: '', child: Text('全部分类')),
                       ...categories.map(
@@ -518,7 +524,9 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                       'plan-template-${widget.criteria.progressTemplateName}',
                     ),
                     initialValue: widget.criteria.progressTemplateName,
-                    decoration: const InputDecoration(labelText: '进度方案'),
+                    decoration: InputDecoration(
+                      labelText: localizeUiText(context, '进度方案'),
+                    ),
                     items: [
                       const DropdownMenuItem(value: '', child: Text('全部进度方案')),
                       ...templates.map(
@@ -541,8 +549,8 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                         '${widget.criteria.progressNodeName}',
                       ),
                       initialValue: widget.criteria.progressNodeName,
-                      decoration: const InputDecoration(
-                        labelText: '进度节点',
+                      decoration: InputDecoration(
+                        labelText: localizeUiText(context, '进度节点'),
                       ),
                       items: [
                         const DropdownMenuItem(
@@ -555,9 +563,7 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                         ),
                       ],
                       onChanged: (value) => widget.onChanged(
-                        widget.criteria.copyWith(
-                          progressNodeName: value ?? '',
-                        ),
+                        widget.criteria.copyWith(progressNodeName: value ?? ''),
                       ),
                     ),
                   ],

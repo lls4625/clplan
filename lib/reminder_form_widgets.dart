@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:intl/intl.dart';
 
 import 'app_controller.dart';
 import 'models.dart';
+import 'l10n/ui_text.dart';
 import 'notification_service.dart';
 import 'work_form_widgets.dart';
 
@@ -39,9 +40,7 @@ class ReminderFormSection extends StatelessWidget {
     return WorkFormSection(
       title: '通知与闹铃',
       icon: Icons.notifications_active_outlined,
-      subtitle: reminders.isEmpty
-          ? '可设置多个通知或闹铃'
-          : '${reminders.length} 个提醒',
+      subtitle: reminders.isEmpty ? '可设置多个通知或闹铃' : '${reminders.length} 个提醒',
       trailing: Semantics(
         label: '启用通知与闹铃',
         child: Switch.adaptive(
@@ -77,12 +76,14 @@ class ReminderFormSection extends StatelessWidget {
               if (reminders.isNotEmpty)
                 Column(
                   children: reminders
-                      .map((rule) => _ReminderListTile(
-                            rule: rule,
-                            fireAt: resolveFireAt?.call(rule) ?? rule.absoluteAt,
-                            readOnly: readOnly,
-                            onRemove: () => onRemove(rule),
-                          ))
+                      .map(
+                        (rule) => _ReminderListTile(
+                          rule: rule,
+                          fireAt: resolveFireAt?.call(rule) ?? rule.absoluteAt,
+                          readOnly: readOnly,
+                          onRemove: () => onRemove(rule),
+                        ),
+                      )
                       .toList(),
                 ),
               if (hasNotificationReminders &&
@@ -106,7 +107,8 @@ class ReminderFormSection extends StatelessWidget {
                 Text(
                   controller.alarmPermission == AlarmPermissionState.unsupported
                       ? '当前系统不支持闹铃提醒；规则会保留，但不会生效。'
-                      : controller.alarmPermission == AlarmPermissionState.denied
+                      : controller.alarmPermission ==
+                            AlarmPermissionState.denied
                       ? '闹铃权限未开启；规则会保留，但不会生效。'
                       : '闹铃提醒需要 iOS 26 或更高版本及独立授权。',
                   style: const TextStyle(fontSize: 12),
@@ -152,7 +154,7 @@ class _ReminderListTile extends StatelessWidget {
       trailing: readOnly
           ? null
           : IconButton(
-              tooltip: '删除提醒',
+              tooltip: localizeUiText(context, '删除提醒'),
               onPressed: onRemove,
               icon: const Icon(Icons.close),
             ),
@@ -174,17 +176,13 @@ Future<DateTime?> showReminderDateTimePicker(
     initialDate: initial,
     firstDate: DateTime(now.year, now.month, now.day),
     lastDate: DateTime(2200),
-    helpText: deliveryType == ReminderDeliveryType.alarm
-        ? '选择闹铃日期'
-        : '选择通知日期',
+    helpText: deliveryType == ReminderDeliveryType.alarm ? '选择闹铃日期' : '选择通知日期',
   );
   if (!context.mounted || date == null) return null;
   final time = await showTimePicker(
     context: context,
     initialTime: const TimeOfDay(hour: 9, minute: 0),
-    helpText: deliveryType == ReminderDeliveryType.alarm
-        ? '选择闹铃时间'
-        : '选择通知时间',
+    helpText: deliveryType == ReminderDeliveryType.alarm ? '选择闹铃时间' : '选择通知时间',
   );
   if (!context.mounted || time == null) return null;
   return DateTime(date.year, date.month, date.day, time.hour, time.minute);

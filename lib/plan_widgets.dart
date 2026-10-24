@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import 'app_controller.dart';
 import 'models.dart';
+import 'l10n/ui_text.dart';
 import 'plan_editor.dart';
 import 'tag_summary.dart';
 import 'task_editor.dart';
@@ -40,17 +41,18 @@ class PlanCard extends StatelessWidget {
     final managementMode = onAddTask != null || onDelete != null;
     final detailedMode = detailed || managementMode;
     final tagsByName = {for (final tag in plan.tags) tag.name: tag};
-    final tagItems = orderedSelectedTagNames(
-      selectedNames: plan.tags.map((tag) => tag.name),
-      definitionOrder: controller.tagDefinitions.map((tag) => tag.name),
-    ).map((name) {
-      final tag = tagsByName[name]!;
-      return CardTagItem(
-        name: tag.name,
-        icon: taskTagIcons[tag.iconName] ?? Icons.label_outline,
-        color: Color(tag.colorValue),
-      );
-    }).toList();
+    final tagItems =
+        orderedSelectedTagNames(
+          selectedNames: plan.tags.map((tag) => tag.name),
+          definitionOrder: controller.tagDefinitions.map((tag) => tag.name),
+        ).map((name) {
+          final tag = tagsByName[name]!;
+          return CardTagItem(
+            name: tag.name,
+            icon: taskTagIcons[tag.iconName] ?? Icons.label_outline,
+            color: Color(tag.colorValue),
+          );
+        }).toList();
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
@@ -164,19 +166,30 @@ class PlanCard extends StatelessWidget {
                               '$completedTasks/${tasks.length} 项任务',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
+                            if (plan.milestones.isNotEmpty ||
+                                plan.rules.isNotEmpty)
+                              Text(
+                                [
+                                  if (plan.milestones.isNotEmpty)
+                                    '${plan.milestones.where((item) => item.completed).length}/${plan.milestones.length} 里程碑',
+                                  if (plan.rules.isNotEmpty)
+                                    '${plan.rules.where((item) => item.enabled).length} 条周期任务',
+                                ].join(' · '),
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
                           ],
                         ),
                       ),
                       if (onAddTask != null)
                         IconButton(
-                          tooltip: '新增任务',
+                          tooltip: localizeUiText(context, '新增任务'),
                           visualDensity: VisualDensity.compact,
                           onPressed: onAddTask,
                           icon: const Icon(Icons.add_task_outlined, size: 20),
                         ),
                       if (onDelete != null)
                         IconButton(
-                          tooltip: '删除计划',
+                          tooltip: localizeUiText(context, '删除计划'),
                           visualDensity: VisualDensity.compact,
                           onPressed: onDelete,
                           icon: const Icon(Icons.delete_outline, size: 20),

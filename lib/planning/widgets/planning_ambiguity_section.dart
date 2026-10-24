@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../l10n/l10n.dart';
+import '../../l10n/ui_text.dart';
 import '../planning_models.dart';
 
 class PlanningAmbiguitySection extends StatelessWidget {

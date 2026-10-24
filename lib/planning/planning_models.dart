@@ -54,7 +54,7 @@ class PlanningRequest {
     required this.defaultDate,
     required this.defaultReminderMinutes,
     this.availableTags = const <String>{},
-    this.mode = PlanningMode.auto,
+    this.mode = PlanningMode.basic,
   });
 
   final int requestId;

@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../l10n/l10n.dart';
+import '../../l10n/ui_text.dart';
 import '../planning_models.dart';
 
 class PlanningSuggestionChips extends StatelessWidget {
@@ -79,13 +80,16 @@ class PlanningSuggestionChips extends StatelessWidget {
                 size: 18,
               ),
               label: Text(_reminderLabel(context, reminder)),
-              tooltip: strings.planningRemoveReminderTooltip,
+              tooltip: localizeUiText(
+                context,
+                strings.planningRemoveReminderTooltip,
+              ),
               onPressed: onRemoveReminders,
             ),
           ),
         ...proposal.tags.map(
           (tag) => Semantics(
-            label: strings.planningTagSemantics(tag),
+            label: localizeUiText(context, strings.planningTagSemantics(tag)),
             child: ExcludeSemantics(
               child: Chip(
                 avatar: const Icon(Icons.label_outline, size: 18),

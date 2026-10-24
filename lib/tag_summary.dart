@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'l10n/ui_text.dart' show localizeUiText;
+
 class CardTagItem {
-  const CardTagItem({
-    required this.name,
-    required this.icon,
-    this.color,
-  });
+  const CardTagItem({required this.name, required this.icon, this.color});
 
   final String name;
   final IconData icon;
@@ -24,7 +22,8 @@ class CardTagSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    final labelStyle = theme.textTheme.labelLarge?.copyWith(fontSize: 12) ??
+    final labelStyle =
+        theme.textTheme.labelLarge?.copyWith(fontSize: 12) ??
         const TextStyle(fontSize: 12);
     final overflowStyle = theme.textTheme.labelMedium?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
@@ -46,8 +45,8 @@ class CardTagSummary extends StatelessWidget {
         final overflowWidth = hiddenCount == 0
             ? 0.0
             : _textWidth(context, '+$hiddenCount', overflowStyle) + 2;
-        final tagsWidth = availableWidth -
-            (hiddenCount == 0 ? 0 : overflowWidth + _spacing);
+        final tagsWidth =
+            availableWidth - (hiddenCount == 0 ? 0 : overflowWidth + _spacing);
 
         return Row(
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -77,7 +76,7 @@ class CardTagSummary extends StatelessWidget {
             if (hiddenCount > 0) ...[
               const SizedBox(width: _spacing),
               Semantics(
-                label: '还有 $hiddenCount 个标签',
+                label: localizeUiText(context, '还有 $hiddenCount 个标签'),
                 child: ExcludeSemantics(
                   child: Text('+$hiddenCount', style: overflowStyle),
                 ),
@@ -100,10 +99,9 @@ class CardTagSummary extends StatelessWidget {
       final overflowWidth = hiddenCount == 0
           ? 0.0
           : _textWidth(context, '+$hiddenCount', overflowStyle) + 2;
-      final reservedWidth = hiddenCount == 0
-          ? 0.0
-          : overflowWidth + _spacing;
-      final chipsWidth = items
+      final reservedWidth = hiddenCount == 0 ? 0.0 : overflowWidth + _spacing;
+      final chipsWidth =
+          items
               .take(count)
               .map(
                 (item) =>
@@ -152,11 +150,7 @@ class CardTagSummary extends StatelessWidget {
     );
   }
 
-  double _textWidth(
-    BuildContext context,
-    String text,
-    TextStyle? style,
-  ) {
+  double _textWidth(BuildContext context, String text, TextStyle? style) {
     final painter = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: Directionality.of(context),

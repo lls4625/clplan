@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:intl/intl.dart';
 
 import 'app_controller.dart';
 import 'models.dart';
+import 'l10n/ui_text.dart';
 import 'tag_summary.dart';
 import 'ui/app_alert.dart';
 
@@ -23,11 +24,7 @@ class TaskCard extends StatelessWidget {
 
   Future<void> _deleteTask(BuildContext context) async {
     if (controller.childrenOf(task.id).isNotEmpty) {
-      showAppAlert(
-        context,
-        title: '无法删除任务',
-        message: '请先删除或移走该主任务下的子任务。',
-      );
+      showAppAlert(context, title: '无法删除任务', message: '请先删除或移走该主任务下的子任务。');
       return;
     }
     final confirmed =
@@ -81,22 +78,23 @@ class TaskCard extends StatelessWidget {
     final snapshotsByName = {
       for (final snapshot in task.tagSnapshots) snapshot.name: snapshot,
     };
-    final tagItems = orderedSelectedTagNames(
-      selectedNames: task.tags,
-      definitionOrder: controller.tagDefinitions.map((tag) => tag.name),
-    ).map((name) {
-      final snapshot = snapshotsByName[name];
-      final definition = controller.tagDefinitionForName(name);
-      return CardTagItem(
-        name: name,
-        icon: snapshot == null
-            ? definition?.icon ?? Icons.history
-            : taskTagIcons[snapshot.iconName] ?? Icons.history,
-        color: snapshot == null
-            ? definition?.color
-            : Color(snapshot.colorValue),
-      );
-    }).toList();
+    final tagItems =
+        orderedSelectedTagNames(
+          selectedNames: task.tags,
+          definitionOrder: controller.tagDefinitions.map((tag) => tag.name),
+        ).map((name) {
+          final snapshot = snapshotsByName[name];
+          final definition = controller.tagDefinitionForName(name);
+          return CardTagItem(
+            name: name,
+            icon: snapshot == null
+                ? definition?.icon ?? Icons.history
+                : taskTagIcons[snapshot.iconName] ?? Icons.history,
+            color: snapshot == null
+                ? definition?.color
+                : Color(snapshot.colorValue),
+          );
+        }).toList();
     return Padding(
       padding: EdgeInsets.only(left: nested ? 20 : 0, bottom: 8),
       child: Card(
@@ -224,13 +222,13 @@ class TaskCard extends StatelessWidget {
                           task.parentTaskId == null &&
                           !controller.isDone(task))
                         IconButton(
-                          tooltip: '新增子任务',
+                          tooltip: localizeUiText(context, '新增子任务'),
                           visualDensity: VisualDensity.compact,
                           onPressed: onAddSubtask,
                           icon: const Icon(Icons.add_task_outlined, size: 20),
                         ),
                       IconButton(
-                        tooltip: '删除任务',
+                        tooltip: localizeUiText(context, '删除任务'),
                         visualDensity: VisualDensity.compact,
                         onPressed: () => _deleteTask(context),
                         icon: const Icon(Icons.delete_outline, size: 20),

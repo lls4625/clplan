@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../l10n/l10n.dart';
+import '../../l10n/ui_text.dart';
 import '../planning_models.dart';
 
 class PlanningWarningSection extends StatelessWidget {
@@ -24,7 +25,7 @@ class PlanningWarningSection extends StatelessWidget {
         return Semantics(
           container: true,
           liveRegion: warning.isBlocking,
-          label: semanticsLabel,
+          label: localizeUiText(context, semanticsLabel),
           child: ExcludeSemantics(
             child: Container(
               width: double.infinity,

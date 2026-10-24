@@ -1,10 +1,10 @@
 {
   "@@locale": "zh_Hans",
-  "planningPlanTitle": "智能规划计划",
+  "planningPlanTitle": "基础规划计划",
   "@planningPlanTitle": {
     "description": "新建计划时智能规划面板的标题"
   },
-  "planningTaskTitle": "智能规划任务",
+  "planningTaskTitle": "基础规划任务",
   "@planningTaskTitle": {
     "description": "新建任务时智能规划面板的标题"
   },

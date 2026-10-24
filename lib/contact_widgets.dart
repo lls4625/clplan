@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import 'app_controller.dart';
 import 'models.dart';
+import 'l10n/ui_text.dart';
 import 'ui/app_alert.dart';
 import 'work_form_widgets.dart';
 
@@ -32,7 +33,7 @@ class ContactFormSection extends StatelessWidget {
       trailing: readOnly
           ? null
           : IconButton(
-              tooltip: '选择或新增联系人',
+              tooltip: localizeUiText(context, '选择或新增联系人'),
               onPressed: () => _pickContact(context),
               icon: const Icon(Icons.person_add_alt_1_outlined),
             ),
@@ -108,14 +109,14 @@ class ContactSelectionField extends StatelessWidget {
                         ),
                         if (!readOnly) ...[
                           IconButton(
-                            tooltip: '编辑联系人配置',
+                            tooltip: localizeUiText(context, '编辑联系人配置'),
                             onPressed: _configuredContact(contact) == null
                                 ? null
                                 : () => _editContact(context, contact),
                             icon: const Icon(Icons.edit_outlined, size: 19),
                           ),
                           IconButton(
-                            tooltip: '取消选择',
+                            tooltip: localizeUiText(context, '取消选择'),
                             onPressed: () => onChanged(
                               selectedContacts
                                   .where((item) => item.id != contact.id)
@@ -244,7 +245,7 @@ Future<ContactEntry?> showContactPicker(
                         title: Text(contact.name),
                         subtitle: detail.isEmpty ? null : Text(detail),
                         trailing: IconButton(
-                          tooltip: '编辑联系人',
+                          tooltip: localizeUiText(context, '编辑联系人'),
                           onPressed: () async {
                             final updated = await showContactEditorDialog(
                               context,
@@ -304,18 +305,24 @@ Future<ContactEntry?> showContactEditorDialog(
               TextField(
                 controller: name,
                 autofocus: contact == null,
-                decoration: const InputDecoration(labelText: '姓名'),
+                decoration: InputDecoration(
+                  labelText: localizeUiText(context, '姓名'),
+                ),
                 onChanged: (_) => setDialogState(() {}),
               ),
               TextField(
                 controller: phone,
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: '电话'),
+                decoration: InputDecoration(
+                  labelText: localizeUiText(context, '电话'),
+                ),
               ),
               TextField(
                 controller: remark,
                 maxLength: maxContactRemarkLength,
-                decoration: const InputDecoration(labelText: '备注'),
+                decoration: InputDecoration(
+                  labelText: localizeUiText(context, '备注'),
+                ),
               ),
             ],
           ),

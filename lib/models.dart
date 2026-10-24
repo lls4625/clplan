@@ -1237,7 +1237,7 @@ class AppPreferences {
     this.theme = 'system',
     this.followSystemFontScale = true,
     this.fontScale = 1.0,
-    this.language = 'zh',
+    this.language = 'system',
     this.calendarDensity = 'medium',
     this.calendarSmallHeight = 62,
     this.calendarMediumHeight = 82,
@@ -1310,8 +1310,7 @@ class AppPreferences {
     bool? reminderSound,
   }) => AppPreferences(
     theme: theme ?? this.theme,
-    followSystemFontScale:
-        followSystemFontScale ?? this.followSystemFontScale,
+    followSystemFontScale: followSystemFontScale ?? this.followSystemFontScale,
     fontScale: fontScale ?? this.fontScale,
     language: language ?? this.language,
     calendarDensity: calendarDensity ?? this.calendarDensity,

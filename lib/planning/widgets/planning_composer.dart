@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../../app_controller.dart';
 import '../../l10n/l10n.dart';
+import '../../l10n/ui_text.dart';
 import '../../models.dart';
 import '../../task_widgets.dart';
 import '../planning_models.dart';
@@ -199,7 +200,7 @@ class _PlanningComposerState extends State<PlanningComposer> {
                       ),
                     ),
                     IconButton(
-                      tooltip: strings.planningClose,
+                      tooltip: localizeUiText(context, strings.planningClose),
                       onPressed: _attemptClose,
                       icon: const Icon(Icons.close),
                     ),
@@ -221,11 +222,16 @@ class _PlanningComposerState extends State<PlanningComposer> {
                           maxLength: 100,
                           textInputAction: TextInputAction.newline,
                           decoration: InputDecoration(
-                            labelText:
-                                widget.targetKind == PlanningTargetKind.plan
-                                ? strings.planningPlanInputLabel
-                                : strings.planningTaskInputLabel,
-                            hintText: strings.planningInputHint,
+                            labelText: localizeUiText(
+                              context,
+                              widget.targetKind == PlanningTargetKind.plan
+                                  ? strings.planningPlanInputLabel
+                                  : strings.planningTaskInputLabel,
+                            ),
+                            hintText: localizeUiText(
+                              context,
+                              strings.planningInputHint,
+                            ),
                             alignLabelWithHint: true,
                           ),
                         ),
@@ -234,7 +240,10 @@ class _PlanningComposerState extends State<PlanningComposer> {
                             padding: const EdgeInsets.only(top: 8),
                             child: Semantics(
                               liveRegion: true,
-                              label: strings.planningAnalysisInProgress,
+                              label: localizeUiText(
+                                context,
+                                strings.planningAnalysisInProgress,
+                              ),
                               child: const ExcludeSemantics(
                                 child: LinearProgressIndicator(),
                               ),

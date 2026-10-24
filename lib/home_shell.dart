@@ -1,11 +1,12 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import 'app_controller.dart';
 import 'calendar_page.dart';
 import 'developer_tip.dart';
 import 'l10n/l10n.dart';
+import 'l10n/ui_text.dart';
 import 'plan_editor.dart';
 import 'plans_page.dart';
 import 'settings_page.dart';
@@ -56,7 +57,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      widget.controller.refreshNotifications();
+      widget.controller.refreshAfterResume();
     }
   }
 
@@ -108,7 +109,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               0 => _calendarLeading(),
               1 => _planSummary(),
               2 when statCriteria.mode != StatMode.custom => IconButton(
-                tooltip: '回到当前',
+                tooltip: localizeUiText(context, '回到当前'),
                 onPressed: () {
                   setState(
                     () => statCriteria = statCriteria.copyWith(
@@ -167,6 +168,18 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   void _openPendingNotificationTask() {
     if (openingNotificationTask) return;
+    final planId = widget.controller.takePendingPlanToOpen();
+    if (planId != null) {
+      openingNotificationTask = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final plan = widget.controller.planById(planId);
+        if (mounted && plan != null) {
+          await showPlanEditor(context, widget.controller, plan: plan);
+        }
+        openingNotificationTask = false;
+      });
+      return;
+    }
     final taskId = widget.controller.takePendingTaskToOpen();
     if (taskId == null) return;
     openingNotificationTask = true;
@@ -187,7 +200,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         icon: const Icon(Icons.volunteer_activism_outlined),
       ),
       IconButton(
-        tooltip: '新建计划',
+        tooltip: localizeUiText(context, '新建计划'),
         onPressed: () => showPlanEditor(
           context,
           widget.controller,
@@ -198,12 +211,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     ],
     1 => [
       IconButton(
-        tooltip: '新建计划',
+        tooltip: localizeUiText(context, '新建计划'),
         onPressed: () => showPlanEditor(context, widget.controller),
         icon: const Icon(Icons.add),
       ),
       IconButton(
-        tooltip: '查询条件',
+        tooltip: localizeUiText(context, '查询条件'),
         onPressed: () => scaffoldKey.currentState?.openEndDrawer(),
         icon: const Icon(Icons.filter_alt_outlined),
       ),
@@ -211,7 +224,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     2 => [
       _StatsRefreshButton(onRefresh: widget.controller.reload),
       IconButton(
-        tooltip: '统计条件',
+        tooltip: localizeUiText(context, '统计条件'),
         onPressed: () => scaffoldKey.currentState?.openEndDrawer(),
         icon: const Icon(Icons.tune),
       ),
@@ -222,7 +235,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   Widget _calendarLeading() => Row(
     children: [
       IconButton(
-        tooltip: '切换周卡片/月份视图',
+        tooltip: localizeUiText(context, '切换周卡片/月份视图'),
         onPressed: () => calendarKey.currentState?.toggleCalendarView(),
         icon: const Icon(Icons.grid_view_outlined),
       ),
@@ -314,11 +327,7 @@ class _StatsRefreshButtonState extends State<_StatsRefreshButton>
       await widget.onRefresh();
     } catch (error) {
       if (mounted) {
-        showAppAlert(
-          context,
-          title: '刷新失败',
-          message: '统计数据刷新失败：$error',
-        );
+        showAppAlert(context, title: '刷新失败', message: '统计数据刷新失败：$error');
       }
     } finally {
       if (mounted) {
