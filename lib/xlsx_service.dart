@@ -48,6 +48,7 @@ class XlsxService {
     'calendarDisplayMode': '日历显示',
     'reminderEnabled': '启用提醒',
     'reminders': '提醒规则',
+    'completedAt': '完成时间',
     'updatedAt': '更新时间',
   };
 
@@ -203,6 +204,7 @@ class XlsxService {
                 )
                 .toList(),
           ),
+          plan.completedAt?.toIso8601String() ?? '',
           plan.updatedAt.toIso8601String(),
         ].map(TextCellValue.new).toList(),
       );
@@ -223,6 +225,7 @@ class XlsxService {
       16,
       12,
       42,
+      24,
       24,
     ];
     for (var index = 0; index < widths.length; index++) {
@@ -657,6 +660,7 @@ class XlsxService {
           ),
           milestones: const [],
           rules: const [],
+          completedAt: DateTime.tryParse(values['completedAt'] ?? ''),
           updatedAt: DateTime.tryParse(values['updatedAt'] ?? '') ?? now,
           calendarDisplayMode:
               _calendarModes[values['calendarDisplayMode']] ??

@@ -1617,13 +1617,22 @@ class _CalendarPlanLabel extends StatelessWidget {
     final showStrikethrough =
         completed &&
         completionStyles.contains(PlanCompletionStyle.strikethrough);
-    final textStyle = dimText
-        ? (style ?? DefaultTextStyle.of(context).style).copyWith(
-            color: completedColor,
-          )
-        : style;
+    final baseTextStyle = style ?? DefaultTextStyle.of(context).style;
+    final textStyle = baseTextStyle.copyWith(
+      color: dimText ? completedColor : baseTextStyle.color,
+      decoration: showStrikethrough
+          ? TextDecoration.lineThrough
+          : baseTextStyle.decoration,
+      decorationColor: showStrikethrough
+          ? completedColor
+          : baseTextStyle.decorationColor,
+      decorationThickness: showStrikethrough
+          ? 0.75
+          : baseTextStyle.decorationThickness,
+    );
     final label = Text(
       plan.name,
+      textAlign: TextAlign.start,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: textStyle,
@@ -1633,21 +1642,10 @@ class _CalendarPlanLabel extends StatelessWidget {
       label: plan.name,
       value: completed ? '已完成' : '未完成',
       child: ExcludeSemantics(
-        child: showStrikethrough
-            ? Stack(
-                alignment: Alignment.center,
-                children: [
-                  label,
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    child: IgnorePointer(
-                      child: Container(height: 1, color: completedColor),
-                    ),
-                  ),
-                ],
-              )
-            : label,
+        child: Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: label,
+        ),
       ),
     );
   }

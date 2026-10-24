@@ -1141,6 +1141,7 @@ class PlanItem {
     required this.milestones,
     required this.rules,
     required this.updatedAt,
+    this.completedAt,
     this.calendarDisplayMode = PlanCalendarDisplayMode.wholePeriod,
     this.reminderEnabled = false,
     this.reminders = const [],
@@ -1159,6 +1160,7 @@ class PlanItem {
   final List<PlanMilestone> milestones;
   final List<RecurrenceRule> rules;
   final DateTime updatedAt;
+  final DateTime? completedAt;
   final PlanCalendarDisplayMode calendarDisplayMode;
   final bool reminderEnabled;
   final List<TaskReminderRule> reminders;
@@ -1177,6 +1179,8 @@ class PlanItem {
     List<PlanMilestone>? milestones,
     List<RecurrenceRule>? rules,
     DateTime? updatedAt,
+    DateTime? completedAt,
+    bool clearCompletedAt = false,
     PlanCalendarDisplayMode? calendarDisplayMode,
     bool? reminderEnabled,
     List<TaskReminderRule>? reminders,
@@ -1195,6 +1199,7 @@ class PlanItem {
     milestones: milestones ?? this.milestones,
     rules: rules ?? this.rules,
     updatedAt: updatedAt ?? this.updatedAt,
+    completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
     calendarDisplayMode: calendarDisplayMode ?? this.calendarDisplayMode,
     reminderEnabled: reminderEnabled ?? this.reminderEnabled,
     reminders: reminders ?? this.reminders,

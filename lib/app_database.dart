@@ -14,7 +14,7 @@ class AppDatabase {
     final root = await getDatabasesPath();
     return openDatabase(
       p.join(root, 'clplan.sqlite3'),
-      version: 12,
+      version: 13,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = OFF');
         await db.setJournalMode('WAL');
@@ -218,6 +218,9 @@ class AppDatabase {
             where: 'key_name IN (?, ?)',
             whereArgs: ['id', 'status'],
           );
+        }
+        if (oldVersion < 13) {
+          await _addColumnIfMissing(db, 'plans', 'completed_at', 'TEXT');
         }
       },
     );
@@ -440,6 +443,7 @@ class AppDatabase {
         category_icon_name TEXT NOT NULL DEFAULT 'project',
         calendar_display_mode TEXT NOT NULL DEFAULT 'whole_period',
         reminder_enabled INTEGER NOT NULL DEFAULT 0,
+        completed_at TEXT,
         updated_at TEXT NOT NULL
       )
     ''');
@@ -1108,6 +1112,9 @@ class AppDatabase {
         milestones: milestonesByPlan[id] ?? const [],
         rules: rulesByPlan[id] ?? const [],
         updatedAt: DateTime.parse(row['updated_at']! as String),
+        completedAt: DateTime.tryParse(
+          (row['completed_at'] as String?) ?? '',
+        ),
         calendarDisplayMode: planCalendarDisplayModeFromName(
           row['calendar_display_mode'] as String?,
         ),
@@ -1166,6 +1173,7 @@ class AppDatabase {
         'category_icon_name': plan.categoryIconName,
         'calendar_display_mode': plan.calendarDisplayMode.storageName,
         'reminder_enabled': plan.reminderEnabled ? 1 : 0,
+        'completed_at': plan.completedAt?.toIso8601String(),
         'updated_at': plan.updatedAt.toIso8601String(),
       }, conflictAlgorithm: ConflictAlgorithm.replace);
       await txn.delete(

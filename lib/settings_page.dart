@@ -2999,6 +2999,9 @@ class _ImportPreviewState extends State<_ImportPreview> {
           : local.categoryIconName,
       tags: _mergedTags(local, remote, selected),
       progress: useRemoteProgress ? remote.progress : local.progress,
+      completedAt: useRemoteProgress
+          ? remote.completedAt
+          : local.completedAt,
       startDate: selected.contains('startDate')
           ? remote.startDate
           : local.startDate,

@@ -740,10 +740,22 @@ class AppController extends ChangeNotifier {
         throw StateError('重复任务的开始日期不能晚于结束日期。');
       }
     }
-    await db.savePlan(plan);
+    final existing = planById(plan.id);
+    final wasCompleted = existing?.progress.completed ?? false;
+    final normalized = plan.progress.completed
+        ? plan.copyWith(
+            completedAt: wasCompleted
+                ? plan.completedAt ??
+                      existing?.completedAt ??
+                      existing?.updatedAt ??
+                      plan.updatedAt
+                : plan.completedAt ?? DateTime.now(),
+          )
+        : plan.copyWith(clearCompletedAt: true);
+    await db.savePlan(normalized);
     await reload();
-    final activeReminders = plan.reminderEnabled
-        ? plan.reminders
+    final activeReminders = normalized.reminderEnabled
+        ? normalized.reminders
         : const <TaskReminderRule>[];
     await _reconcileReminders(
       requestNotificationPermission: activeReminders.any(

@@ -244,7 +244,11 @@ class _StatsPageState extends State<StatsPage>
       final key = task.reason.isEmpty ? '未填写' : task.reason;
       reasonCounts[key] = (reasonCounts[key] ?? 0) + 1;
     }
-    final buckets = _buckets(start, end, cohort);
+    final planCompletionBuckets = _planCompletionBuckets(
+      start,
+      end,
+      planCohort,
+    );
     return Column(
       children: [
         Padding(
@@ -320,7 +324,7 @@ class _StatsPageState extends State<StatsPage>
                       planCohort,
                       startText,
                       endText,
-                      buckets,
+                      planCompletionBuckets,
                     ),
                   ],
                   if (pageView == StatView.tasks) ...[
@@ -429,7 +433,7 @@ class _StatsPageState extends State<StatsPage>
     List<PlanItem> plans,
     String periodStart,
     String periodEnd,
-    List<_Bucket> taskBuckets,
+    List<_Bucket> planCompletionBuckets,
   ) {
     final completed = plans.where((plan) => plan.progress.completed).length;
     final progressGroups = <String, _PlanProgressStat>{};
@@ -509,8 +513,8 @@ class _StatsPageState extends State<StatsPage>
         itemLabel: '个计划',
       ),
       _Panel(
-        title: '完成趋势',
-        child: _TrendChart(buckets: taskBuckets),
+        title: '计划完成趋势',
+        child: _TrendChart(buckets: planCompletionBuckets),
       ),
       _Panel(
         title: '当前进度分布',
@@ -754,7 +758,11 @@ class _StatsPageState extends State<StatsPage>
     );
   }
 
-  List<_Bucket> _buckets(DateTime start, DateTime end, List<TaskItem> tasks) {
+  List<_Bucket> _planCompletionBuckets(
+    DateTime start,
+    DateTime end,
+    List<PlanItem> plans,
+  ) {
     final daily =
         widget.criteria.mode == StatMode.week ||
         widget.criteria.mode == StatMode.month ||
@@ -763,25 +771,24 @@ class _StatsPageState extends State<StatsPage>
     final result = <_Bucket>[];
     var cursor = start;
     while (!cursor.isAfter(end)) {
-      final bucketStart = dateOnly(cursor);
       final bucketEndDate = daily
           ? cursor
           : DateTime(cursor.year, cursor.month + 1, 0);
-      final bucketEnd = dateOnly(
-        bucketEndDate.isAfter(end) ? end : bucketEndDate,
-      );
-      final items = tasks
-          .where(
-            (task) =>
-                task.startDate.compareTo(bucketStart) >= 0 &&
-                task.startDate.compareTo(bucketEnd) <= 0,
-          )
+      final boundedEnd = bucketEndDate.isAfter(end) ? end : bucketEndDate;
+      final bucketEnd = dateOnly(boundedEnd);
+      final activePlans = plans
+          .where((plan) => plan.startDate.compareTo(bucketEnd) <= 0)
           .toList();
+      final completed = activePlans.where((plan) {
+        if (!plan.progress.completed) return false;
+        final completedAt = plan.completedAt ?? plan.updatedAt;
+        return dateOnly(completedAt.toLocal()).compareTo(bucketEnd) <= 0;
+      }).length;
       result.add(
         _Bucket(
           label: daily ? '${cursor.day}' : '${cursor.month}月',
-          total: items.length,
-          done: items.where(widget.controller.isDone).length,
+          total: activePlans.length,
+          done: completed,
         ),
       );
       cursor = daily
@@ -938,11 +945,21 @@ class _QuadrantCard extends StatelessWidget {
                         ).colorScheme.onSurfaceVariant;
                         final title = Text(
                           entry.title,
+                          textAlign: TextAlign.start,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 11,
                             color: dimText ? completedColor : null,
+                            decoration: showStrikethrough
+                                ? TextDecoration.lineThrough
+                                : null,
+                            decorationColor: showStrikethrough
+                                ? completedColor
+                                : null,
+                            decorationThickness: showStrikethrough
+                                ? 0.75
+                                : null,
                           ),
                         );
                         return Semantics(
@@ -967,6 +984,8 @@ class _QuadrantCard extends StatelessWidget {
                                   const SizedBox(width: 4),
                                   Expanded(
                                     child: Container(
+                                      alignment:
+                                          AlignmentDirectional.centerStart,
                                       padding: showBorder
                                           ? const EdgeInsets.symmetric(
                                               horizontal: 2,
@@ -984,24 +1003,7 @@ class _QuadrantCard extends StatelessWidget {
                                                   BorderRadius.circular(4),
                                             )
                                           : null,
-                                      child: showStrikethrough
-                                          ? Stack(
-                                              alignment: Alignment.center,
-                                              children: [
-                                                title,
-                                                Positioned(
-                                                  left: 0,
-                                                  right: 0,
-                                                  child: IgnorePointer(
-                                                    child: Container(
-                                                      height: 1,
-                                                      color: completedColor,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            )
-                                          : title,
+                                      child: title,
                                     ),
                                   ),
                                 ],
@@ -1744,44 +1746,157 @@ class _Bucket {
 
 class _TrendChart extends StatelessWidget {
   const _TrendChart({required this.buckets});
+
+  static const completedColor = Color(0xff3f9875);
+  static const unfinishedColor = Color(0xff487bca);
+
   final List<_Bucket> buckets;
+
+  Widget _legendItem(Color color, String label, int value) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      ),
+      const SizedBox(width: 4),
+      Text('$label $value', style: const TextStyle(fontSize: 11)),
+    ],
+  );
+
+  bool _showLabel(int index) {
+    if (buckets.length <= 14) return true;
+    final ordinal = index + 1;
+    return index == 0 || ordinal % 5 == 0 || index == buckets.length - 1;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final total = buckets.isEmpty ? 0 : buckets.last.total;
+    if (total == 0) {
+      return Semantics(
+        label: '计划完成趋势',
+        value: '本周期暂无计划数据',
+        excludeSemantics: true,
+        child: const _StatisticsEmpty(label: '本周期暂无计划数据'),
+      );
+    }
+    final completed = buckets.last.done;
+    final unfinished = total - completed;
     final maximum = buckets.fold<int>(
       1,
       (value, bucket) => bucket.total > value ? bucket.total : value,
     );
-    return SizedBox(
-      height: 170,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: buckets
-            .map(
-              (bucket) => Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (bucket.total > 0)
-                      Text(
-                        '${bucket.total}',
-                        style: const TextStyle(fontSize: 9),
+    return Semantics(
+      label: '计划完成趋势',
+      value: '本周期共 $total 个计划，$completed 个已完成，$unfinished 个未完成',
+      excludeSemantics: true,
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _legendItem(completedColor, '已完成', completed),
+              const SizedBox(width: 14),
+              _legendItem(unfinishedColor, '未完成', unfinished),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 150,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: buckets.asMap().entries.map((entry) {
+                final index = entry.key;
+                final bucket = entry.value;
+                return Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final availableHeight = math.max(
+                              0.0,
+                              constraints.maxHeight - 14,
+                            );
+                            final completedHeight =
+                                bucket.done / maximum * availableHeight;
+                            final unfinishedHeight =
+                                (bucket.total - bucket.done) /
+                                maximum *
+                                availableHeight;
+                            final barHeight =
+                                completedHeight + unfinishedHeight;
+                            return Stack(
+                              alignment: Alignment.bottomCenter,
+                              children: [
+                                if (bucket.total > 0)
+                                  Align(
+                                    alignment: Alignment.bottomCenter,
+                                    child: FractionallySizedBox(
+                                      widthFactor: .62,
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(3),
+                                        child: SizedBox(
+                                          height: barHeight,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              SizedBox(
+                                                height: unfinishedHeight,
+                                                child: const ColoredBox(
+                                                  color: unfinishedColor,
+                                                ),
+                                              ),
+                                              SizedBox(
+                                                height: completedHeight,
+                                                child: const ColoredBox(
+                                                  color: completedColor,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                if (bucket.total > 0 && _showLabel(index))
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: barHeight + 2,
+                                    child: Text(
+                                      '${bucket.total}',
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      style: const TextStyle(fontSize: 9),
+                                    ),
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
                       ),
-                    Container(
-                      height: (bucket.total - bucket.done) / maximum * 105,
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                      color: const Color(0xff487bca),
-                    ),
-                    Container(
-                      height: bucket.done / maximum * 105,
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                      color: const Color(0xff3f9875),
-                    ),
-                    Text(bucket.label, style: const TextStyle(fontSize: 8)),
-                  ],
-                ),
-              ),
-            )
-            .toList(),
+                      const SizedBox(height: 4),
+                      SizedBox(
+                        height: 12,
+                        child: Text(
+                          _showLabel(index) ? bucket.label : '',
+                          maxLines: 1,
+                          softWrap: false,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 9),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
       ),
     );
   }
