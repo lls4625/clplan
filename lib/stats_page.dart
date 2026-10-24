@@ -638,6 +638,8 @@ class _StatsPageState extends State<StatsPage>
                 return _QuadrantCard(
                   group: group,
                   emptyLabel: _emptyScopeLabel,
+                  completionStyles:
+                      widget.controller.preferences.quadrantCompletionStyles,
                   onOpenEntry: _openEntry,
                 );
               },
@@ -858,11 +860,13 @@ class _QuadrantCard extends StatelessWidget {
   const _QuadrantCard({
     required this.group,
     required this.emptyLabel,
+    required this.completionStyles,
     required this.onOpenEntry,
   });
 
   final _QuadrantGroup group;
   final String emptyLabel;
+  final Set<PlanCompletionStyle> completionStyles;
   final ValueChanged<_StatEntry> onOpenEntry;
 
   @override
@@ -931,41 +935,99 @@ class _QuadrantCard extends StatelessWidget {
                       itemBuilder: (context, index) {
                         final entry = group.entries[index];
                         final done = entry.completed;
-                        return InkWell(
-                          onTap: () => onOpenEntry(entry),
-                          borderRadius: BorderRadius.circular(6),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  done
-                                      ? Icons.check_circle
-                                      : Icons.radio_button_unchecked,
-                                  size: 12,
-                                  color: done
-                                      ? Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant
-                                      : group.definition.color,
-                                ),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    entry.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: done
-                                          ? Theme.of(context)
-                                                .colorScheme
-                                                .onSurfaceVariant
+                        final showCheck =
+                            done &&
+                            completionStyles.contains(
+                              PlanCompletionStyle.check,
+                            );
+                        final dimText =
+                            done &&
+                            completionStyles.contains(
+                              PlanCompletionStyle.dimText,
+                            );
+                        final showBorder =
+                            done &&
+                            completionStyles.contains(
+                              PlanCompletionStyle.border,
+                            );
+                        final showStrikethrough =
+                            done &&
+                            completionStyles.contains(
+                              PlanCompletionStyle.strikethrough,
+                            );
+                        final completedColor = Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant;
+                        final title = Text(
+                          entry.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: dimText ? completedColor : null,
+                          ),
+                        );
+                        return Semantics(
+                          label: entry.title,
+                          value: done ? '已完成' : '未完成',
+                          button: true,
+                          excludeSemantics: true,
+                          child: InkWell(
+                            onTap: () => onOpenEntry(entry),
+                            borderRadius: BorderRadius.circular(6),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    showCheck
+                                        ? Icons.check_circle
+                                        : Icons.radio_button_unchecked,
+                                    size: 12,
+                                    color: group.definition.color,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Container(
+                                      padding: showBorder
+                                          ? const EdgeInsets.symmetric(
+                                              horizontal: 2,
+                                            )
+                                          : EdgeInsets.zero,
+                                      decoration: showBorder
+                                          ? BoxDecoration(
+                                              border: Border.all(
+                                                color: completedColor.withAlpha(
+                                                  120,
+                                                ),
+                                                width: .8,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            )
                                           : null,
+                                      child: showStrikethrough
+                                          ? Stack(
+                                              alignment: Alignment.center,
+                                              children: [
+                                                title,
+                                                Positioned(
+                                                  left: 0,
+                                                  right: 0,
+                                                  child: IgnorePointer(
+                                                    child: Container(
+                                                      height: 1,
+                                                      color: completedColor,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            )
+                                          : title,
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         );

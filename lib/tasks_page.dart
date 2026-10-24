@@ -264,6 +264,7 @@ class _TasksPageState extends State<TasksPage>
                   widget.controller,
                   parentTaskId: task.id,
                   initialDate: task.startDate,
+                  initialPlanId: task.planId,
                 ),
               ),
             ],

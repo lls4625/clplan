@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
 import 'calendar_page.dart';
+import 'developer_tip.dart';
+import 'l10n/l10n.dart';
 import 'plan_editor.dart';
 import 'plans_page.dart';
 import 'settings_page.dart';
@@ -21,6 +25,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final calendarKey = GlobalKey<CalendarPageState>();
+  late final DeveloperTipController developerTipController;
   int index = 0;
   DateTime selectedDate = DateTime.now();
   late StatCriteria statCriteria;
@@ -32,6 +37,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    developerTipController = DeveloperTipController();
+    developerTipController
+      ..hostReady = () => mounted
+      ..onLightFeedback = _showLightTipFeedback;
     statCriteria = StatCriteria.initial();
     planSearchCriteria = PlanSearchCriteria.initial();
   }
@@ -39,6 +48,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    developerTipController.dispose();
     super.dispose();
   }
 
@@ -77,7 +87,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             criteria: statCriteria,
             onCriteriaChanged: (value) => setState(() => statCriteria = value),
           ),
-          SettingsPage(controller: widget.controller),
+          SettingsPage(
+            controller: widget.controller,
+            developerTipController: developerTipController,
+          ),
         ];
         return Scaffold(
           key: scaffoldKey,
@@ -197,9 +210,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   List<Widget> _actions(BuildContext context) => switch (index) {
     0 => [
       IconButton(
-        tooltip: '赞赏',
-        onPressed: () => _tips(context),
-        icon: const Icon(Icons.favorite_border),
+        tooltip: context.l10n.tipMenuTitle,
+        onPressed: () => showDeveloperTipPage(context, developerTipController),
+        icon: const Icon(Icons.volunteer_activism_outlined),
       ),
       IconButton(
         tooltip: '新建计划',
@@ -279,39 +292,17 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     );
   }
 
-  void _tips(BuildContext context) => showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('让好用的工具慢慢长大'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('赞赏功能即将开放。'),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            children: [6, 12, 30]
-                .map(
-                  (amount) => OutlinedButton(
-                    onPressed: () => ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(const SnackBar(content: Text('赞赏功能即将开放'))),
-                    child: Text('¥$amount'),
-                  ),
-                )
-                .toList(),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
-        ),
-      ],
-    ),
-  );
+  void _showLightTipFeedback(DeveloperTipCelebration celebration) {
+    if (!mounted) return;
+    unawaited(_presentLightTipFeedback(celebration));
+  }
+
+  Future<void> _presentLightTipFeedback(
+    DeveloperTipCelebration celebration,
+  ) async {
+    await showDeveloperTipThanksDialog(context, celebration);
+    developerTipController.dismiss(celebration.transactionId);
+  }
 }
 
 class _StatsRefreshButton extends StatefulWidget {

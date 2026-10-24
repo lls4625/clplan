@@ -1223,6 +1223,10 @@ class ColumnPreference {
       );
 }
 
+enum PlanCompletionStyle { dimText, check, border, strikethrough }
+
+enum PlanCompletionStyleScope { calendarMonth, calendarWeek, quadrant }
+
 class AppPreferences {
   const AppPreferences({
     this.theme = 'system',
@@ -1233,6 +1237,18 @@ class AppPreferences {
     this.calendarMediumHeight = 82,
     this.calendarLargeHeight = 102,
     this.calendarWeeklyCardHeight = 0,
+    this.calendarMonthCompletionStyles = const {
+      PlanCompletionStyle.dimText,
+      PlanCompletionStyle.strikethrough,
+    },
+    this.calendarWeekCompletionStyles = const {
+      PlanCompletionStyle.dimText,
+      PlanCompletionStyle.check,
+    },
+    this.quadrantCompletionStyles = const {
+      PlanCompletionStyle.dimText,
+      PlanCompletionStyle.check,
+    },
     this.defaultReminderMinutes = -1,
     this.reminderSound = true,
   });
@@ -1249,6 +1265,9 @@ class AppPreferences {
   final double calendarMediumHeight;
   final double calendarLargeHeight;
   final double calendarWeeklyCardHeight;
+  final Set<PlanCompletionStyle> calendarMonthCompletionStyles;
+  final Set<PlanCompletionStyle> calendarWeekCompletionStyles;
+  final Set<PlanCompletionStyle> quadrantCompletionStyles;
   final int defaultReminderMinutes;
   final bool reminderSound;
 
@@ -1274,6 +1293,9 @@ class AppPreferences {
     double? calendarMediumHeight,
     double? calendarLargeHeight,
     double? calendarWeeklyCardHeight,
+    Set<PlanCompletionStyle>? calendarMonthCompletionStyles,
+    Set<PlanCompletionStyle>? calendarWeekCompletionStyles,
+    Set<PlanCompletionStyle>? quadrantCompletionStyles,
     int? defaultReminderMinutes,
     bool? reminderSound,
   }) => AppPreferences(
@@ -1286,6 +1308,12 @@ class AppPreferences {
     calendarLargeHeight: calendarLargeHeight ?? this.calendarLargeHeight,
     calendarWeeklyCardHeight:
         calendarWeeklyCardHeight ?? this.calendarWeeklyCardHeight,
+    calendarMonthCompletionStyles:
+        calendarMonthCompletionStyles ?? this.calendarMonthCompletionStyles,
+    calendarWeekCompletionStyles:
+        calendarWeekCompletionStyles ?? this.calendarWeekCompletionStyles,
+    quadrantCompletionStyles:
+        quadrantCompletionStyles ?? this.quadrantCompletionStyles,
     defaultReminderMinutes:
         defaultReminderMinutes ?? this.defaultReminderMinutes,
     reminderSound: reminderSound ?? this.reminderSound,

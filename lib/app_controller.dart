@@ -5,15 +5,23 @@ import 'app_database.dart';
 import 'alarm_service.dart';
 import 'models.dart';
 import 'notification_service.dart';
+import 'planning/basic_planning_engine.dart';
+import 'planning/planning_orchestrator.dart';
+import 'planning/unavailable_model_planning_engine.dart';
 
 class AppController extends ChangeNotifier {
   AppController(this.db)
     : notifications = NotificationService(db),
-      alarms = AlarmService(db);
+      alarms = AlarmService(db),
+      planningOrchestrator = const PlanningOrchestrator(
+        basicEngine: BasicPlanningEngine(),
+        modelEngine: UnavailableModelPlanningEngine(),
+      );
 
   final AppDatabase db;
   final NotificationService notifications;
   final AlarmService alarms;
+  final PlanningOrchestrator planningOrchestrator;
   bool loading = true;
   String? error;
   List<TaskItem> tasks = [];
@@ -275,6 +283,40 @@ class AppController extends ChangeNotifier {
     };
     notifyListeners();
     if (key == 'reminder_sound') await _reconcileReminders();
+  }
+
+  Future<void> setPlanCompletionStyles(
+    PlanCompletionStyleScope scope,
+    Set<PlanCompletionStyle> styles,
+  ) async {
+    final normalized = Set<PlanCompletionStyle>.of(styles);
+    if (scope == PlanCompletionStyleScope.calendarMonth) {
+      normalized.remove(PlanCompletionStyle.check);
+    }
+    final key = switch (scope) {
+      PlanCompletionStyleScope.calendarMonth =>
+        'calendar_month_completion_styles',
+      PlanCompletionStyleScope.calendarWeek =>
+        'calendar_week_completion_styles',
+      PlanCompletionStyleScope.quadrant => 'quadrant_completion_styles',
+    };
+    final stored = PlanCompletionStyle.values
+        .where(normalized.contains)
+        .map((style) => style.name)
+        .join(',');
+    await db.savePreference(key, stored);
+    preferences = switch (scope) {
+      PlanCompletionStyleScope.calendarMonth => preferences.copyWith(
+        calendarMonthCompletionStyles: normalized,
+      ),
+      PlanCompletionStyleScope.calendarWeek => preferences.copyWith(
+        calendarWeekCompletionStyles: normalized,
+      ),
+      PlanCompletionStyleScope.quadrant => preferences.copyWith(
+        quadrantCompletionStyles: normalized,
+      ),
+    };
+    notifyListeners();
   }
 
   Future<void> saveCalendarDensityHeights({

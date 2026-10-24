@@ -1235,6 +1235,8 @@ class _WeeklyDayCardState extends State<_WeeklyDayCard> {
           ..sort((a, b) => a.name.compareTo(b.name));
     final incomplete = plans.where((plan) => !plan.progress.completed).length;
     final colorScheme = Theme.of(context).colorScheme;
+    final completionStyles =
+        widget.controller.preferences.calendarWeekCompletionStyles;
     final weekday = const [
       '周一',
       '周二',
@@ -1327,16 +1329,26 @@ class _WeeklyDayCardState extends State<_WeeklyDayCard> {
                             final planColor =
                                 plan.progress.currentNode?.color ??
                                 Color(plan.categoryColorValue);
+                            final showCheck =
+                                completed &&
+                                completionStyles.contains(
+                                  PlanCompletionStyle.check,
+                                );
+                            final showBorder =
+                                completed &&
+                                completionStyles.contains(
+                                  PlanCompletionStyle.border,
+                                );
                             return Row(
                               children: [
                                 SizedBox(
                                   width: 12,
                                   height: 12,
-                                  child: completed
+                                  child: showCheck
                                       ? Icon(
                                           Icons.check_circle,
                                           size: 12,
-                                          color: colorScheme.onSurfaceVariant,
+                                          color: planColor,
                                         )
                                       : Center(
                                           child: Container(
@@ -1351,9 +1363,29 @@ class _WeeklyDayCardState extends State<_WeeklyDayCard> {
                                 ),
                                 const SizedBox(width: 5),
                                 Expanded(
-                                  child: _CalendarPlanLabel(
-                                    plan: plan,
-                                    style: textStyle,
+                                  child: Container(
+                                    padding: showBorder
+                                        ? const EdgeInsets.symmetric(
+                                            horizontal: 2,
+                                          )
+                                        : EdgeInsets.zero,
+                                    decoration: showBorder
+                                        ? BoxDecoration(
+                                            border: Border.all(
+                                              color: colorScheme
+                                                  .onSurfaceVariant
+                                                  .withAlpha(120),
+                                              width: .8,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          )
+                                        : null,
+                                    child: _CalendarPlanLabel(
+                                      plan: plan,
+                                      style: textStyle,
+                                      completionStyles: completionStyles,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -1417,6 +1449,8 @@ class _CalendarWeekRow extends StatelessWidget {
     final offset = DateTime(year, month, 1).weekday - 1;
     final height = rowHeight;
     final colorScheme = Theme.of(context).colorScheme;
+    final completionStyles =
+        controller.preferences.calendarMonthCompletionStyles;
     final planLimit = AppPreferences.estimatedCalendarItemCount(height);
     final markerSize = (height - 6).clamp(14, 25).toDouble();
     return Row(
@@ -1486,10 +1520,9 @@ class _CalendarWeekRow extends StatelessWidget {
                         child: Wrap(
                           spacing: 3,
                           children: plans.take(4).map((plan) {
-                            final color = plan.progress.completed
-                                ? colorScheme.onSurfaceVariant
-                                : plan.progress.currentNode?.color ??
-                                      Color(plan.categoryColorValue);
+                            final color =
+                                plan.progress.currentNode?.color ??
+                                Color(plan.categoryColorValue);
                             return Container(
                               width: 5,
                               height: 5,
@@ -1507,6 +1540,9 @@ class _CalendarWeekRow extends StatelessWidget {
                         plan.progress.currentNode?.color ??
                         Color(plan.categoryColorValue);
                     final completed = plan.progress.completed;
+                    final showBorder =
+                        completed &&
+                        completionStyles.contains(PlanCompletionStyle.border);
                     return Container(
                       width: double.infinity,
                       margin: const EdgeInsets.only(top: 3),
@@ -1515,10 +1551,8 @@ class _CalendarWeekRow extends StatelessWidget {
                         vertical: 1,
                       ),
                       decoration: BoxDecoration(
-                        color: completed
-                            ? colorScheme.onSurfaceVariant.withAlpha(20)
-                            : color.withAlpha(30),
-                        border: completed
+                        color: color.withAlpha(30),
+                        border: showBorder
                             ? Border.all(
                                 color: colorScheme.onSurfaceVariant.withAlpha(
                                   120,
@@ -1531,6 +1565,7 @@ class _CalendarWeekRow extends StatelessWidget {
                       child: _CalendarPlanLabel(
                         plan: plan,
                         style: const TextStyle(fontSize: 8),
+                        completionStyles: completionStyles,
                       ),
                     );
                   }),
@@ -1553,32 +1588,57 @@ class _CalendarWeekRow extends StatelessWidget {
 }
 
 class _CalendarPlanLabel extends StatelessWidget {
-  const _CalendarPlanLabel({required this.plan, required this.style});
+  const _CalendarPlanLabel({
+    required this.plan,
+    required this.style,
+    required this.completionStyles,
+  });
 
   final PlanItem plan;
   final TextStyle? style;
+  final Set<PlanCompletionStyle> completionStyles;
 
   @override
   Widget build(BuildContext context) {
     final completed = plan.progress.completed;
     final completedColor = Theme.of(context).colorScheme.onSurfaceVariant
         .withAlpha(210);
-    final textStyle = completed
+    final dimText =
+        completed && completionStyles.contains(PlanCompletionStyle.dimText);
+    final showStrikethrough =
+        completed &&
+        completionStyles.contains(PlanCompletionStyle.strikethrough);
+    final textStyle = dimText
         ? (style ?? DefaultTextStyle.of(context).style).copyWith(
             color: completedColor,
           )
         : style;
+    final label = Text(
+      plan.name,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: textStyle,
+    );
 
     return Semantics(
       label: plan.name,
       value: completed ? '已完成' : '未完成',
       child: ExcludeSemantics(
-        child: Text(
-          plan.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: textStyle,
-        ),
+        child: showStrikethrough
+            ? Stack(
+                alignment: Alignment.center,
+                children: [
+                  label,
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    child: IgnorePointer(
+                      child: Container(height: 1, color: completedColor),
+                    ),
+                  ),
+                ],
+              )
+            : label,
       ),
     );
   }

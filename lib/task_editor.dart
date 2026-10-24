@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'app_controller.dart';
 import 'contact_widgets.dart';
 import 'models.dart';
+import 'planning/planning_models.dart';
+import 'planning/widgets/planning_composer.dart';
 import 'reminder_form_widgets.dart';
 import 'task_widgets.dart';
 import 'work_form_widgets.dart';
@@ -16,7 +18,26 @@ Future<bool?> showTaskEditor(
   String? parentTaskId,
   String? originId,
   String? initialPlanId,
+  PlanningDraft? initialDraft,
 }) {
+  if (task == null && initialDraft == null) {
+    final planningDate = initialDate ?? dateOnly(DateTime.now());
+    return showPlanningComposer(
+      context,
+      controller,
+      targetKind: PlanningTargetKind.task,
+      initialDate: planningDate,
+      openEditor: (draft) => showTaskEditor(
+        context,
+        controller,
+        initialDate: initialDate,
+        parentTaskId: parentTaskId,
+        originId: originId,
+        initialPlanId: initialPlanId,
+        initialDraft: draft,
+      ),
+    );
+  }
   final editor = TaskEditor(
     controller: controller,
     task: task,
@@ -24,6 +45,7 @@ Future<bool?> showTaskEditor(
     parentTaskId: parentTaskId,
     originId: originId,
     initialPlanId: initialPlanId,
+    initialDraft: initialDraft,
   );
   return Navigator.of(context).push<bool>(
     MaterialPageRoute(fullscreenDialog: true, builder: (_) => editor),
@@ -39,13 +61,15 @@ class TaskEditor extends StatefulWidget {
     this.parentTaskId,
     this.originId,
     this.initialPlanId,
-  });
+    this.initialDraft,
+  }) : assert(task == null || initialDraft == null);
   final AppController controller;
   final TaskItem? task;
   final String? initialDate;
   final String? parentTaskId;
   final String? originId;
   final String? initialPlanId;
+  final PlanningDraft? initialDraft;
   @override
   State<TaskEditor> createState() => _TaskEditorState();
 }
@@ -79,8 +103,11 @@ class _TaskEditorState extends State<TaskEditor> {
   void initState() {
     super.initState();
     final task = widget.task;
-    title = TextEditingController(text: task?.title ?? '');
-    description = TextEditingController(text: task?.description ?? '');
+    final draft = task == null ? widget.initialDraft : null;
+    title = TextEditingController(text: task?.title ?? draft?.title ?? '');
+    description = TextEditingController(
+      text: task?.description ?? draft?.description ?? '',
+    );
     type = TextEditingController(text: task?.type ?? '');
     selectedContacts = [...?task?.contacts];
     if (selectedContacts.isEmpty && (task?.contact ?? '').trim().isNotEmpty) {
@@ -92,7 +119,7 @@ class _TaskEditorState extends State<TaskEditor> {
         ),
       );
     }
-    selectedTags = {...?task?.tags};
+    selectedTags = {...?task?.tags, ...?draft?.tags};
     reason = TextEditingController(text: task?.reason ?? '');
     followup = TextEditingController();
     statusId =
@@ -109,16 +136,19 @@ class _TaskEditorState extends State<TaskEditor> {
           task?.id ?? 'draft-${DateTime.now().microsecondsSinceEpoch}',
         );
     startDate =
-        task?.startDate ?? widget.initialDate ?? dateOnly(DateTime.now());
-    startTime = task?.startTime ?? '';
-    reminders = [...?task?.reminders];
+        task?.startDate ??
+        draft?.schedule.localDate ??
+        widget.initialDate ??
+        dateOnly(DateTime.now());
+    startTime = task?.startTime ?? draft?.schedule.localTime ?? '';
+    reminders = task?.reminders.toList() ?? _remindersFromDraft(draft);
     if (task == null &&
+        (draft == null ||
+            draft.reminders.intent == ReminderDraftIntent.unspecified) &&
         startTime.isNotEmpty &&
         widget.controller.preferences.defaultReminderMinutes >= 0) {
       reminders.add(
-        _relativeReminder(
-          widget.controller.preferences.defaultReminderMinutes,
-        ),
+        _relativeReminder(widget.controller.preferences.defaultReminderMinutes),
       );
     }
     reminderEnabled = task?.reminderEnabled ?? reminders.isNotEmpty;
@@ -779,6 +809,43 @@ class _TaskEditorState extends State<TaskEditor> {
       );
       reminderEnabled = true;
     });
+  }
+
+  List<TaskReminderRule> _remindersFromDraft(PlanningDraft? draft) {
+    if (draft == null ||
+        draft.reminders.intent != ReminderDraftIntent.specified) {
+      return <TaskReminderRule>[];
+    }
+    final mapped = <String, TaskReminderRule>{};
+    for (final source in draft.reminders.values) {
+      final type = switch (source.type) {
+        PlanningReminderRuleType.relativeDuration =>
+          ReminderRuleType.relativeDuration,
+        PlanningReminderRuleType.relativeDayTime =>
+          ReminderRuleType.relativeDayTime,
+        PlanningReminderRuleType.absolute => ReminderRuleType.absolute,
+      };
+      final deliveryType = switch (source.deliveryType) {
+        PlanningReminderDeliveryType.notification =>
+          ReminderDeliveryType.notification,
+        PlanningReminderDeliveryType.alarm => ReminderDeliveryType.alarm,
+      };
+      final key =
+          '${deliveryType.name}:${type.name}:${source.offsetMinutes}:'
+          '${source.dayOffset}:${source.timeOfDay}:${source.absoluteAt}';
+      mapped[key] = TaskReminderRule(
+        id: 'reminder-${DateTime.now().microsecondsSinceEpoch}-${mapped.length}',
+        taskId: 'draft',
+        type: type,
+        offsetMinutes: source.offsetMinutes,
+        dayOffset: source.dayOffset,
+        timeOfDay: source.timeOfDay,
+        absoluteAt: source.absoluteAt,
+        sortOrder: mapped.length,
+        deliveryType: deliveryType,
+      );
+    }
+    return mapped.values.toList();
   }
 
   TaskReminderRule _relativeReminder(int minutes) => TaskReminderRule(

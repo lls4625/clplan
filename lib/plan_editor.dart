@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'app_controller.dart';
 import 'contact_widgets.dart';
 import 'models.dart';
+import 'planning/planning_models.dart';
+import 'planning/widgets/planning_composer.dart';
 import 'reminder_form_widgets.dart';
 import 'task_editor.dart';
 import 'task_widgets.dart';
@@ -13,16 +15,35 @@ Future<bool?> showPlanEditor(
   AppController controller, {
   PlanItem? plan,
   String? initialDate,
-}) => Navigator.of(context).push<bool>(
-  MaterialPageRoute(
-    fullscreenDialog: plan == null,
-    builder: (_) => PlanEditor(
-      controller: controller,
-      plan: plan,
-      initialDate: initialDate,
+  PlanningDraft? initialDraft,
+}) {
+  if (plan == null && initialDraft == null) {
+    final planningDate = initialDate ?? dateOnly(DateTime.now());
+    return showPlanningComposer(
+      context,
+      controller,
+      targetKind: PlanningTargetKind.plan,
+      initialDate: planningDate,
+      openEditor: (draft) => showPlanEditor(
+        context,
+        controller,
+        initialDate: initialDate,
+        initialDraft: draft,
+      ),
+    );
+  }
+  return Navigator.of(context).push<bool>(
+    MaterialPageRoute(
+      fullscreenDialog: plan == null,
+      builder: (_) => PlanEditor(
+        controller: controller,
+        plan: plan,
+        initialDate: initialDate,
+        initialDraft: initialDraft,
+      ),
     ),
-  ),
-);
+  );
+}
 
 class PlanEditor extends StatefulWidget {
   const PlanEditor({
@@ -30,11 +51,13 @@ class PlanEditor extends StatefulWidget {
     required this.controller,
     this.plan,
     this.initialDate,
-  });
+    this.initialDraft,
+  }) : assert(plan == null || initialDraft == null);
 
   final AppController controller;
   final PlanItem? plan;
   final String? initialDate;
+  final PlanningDraft? initialDraft;
 
   @override
   State<PlanEditor> createState() => _PlanEditorState();
@@ -60,21 +83,26 @@ class _PlanEditorState extends State<PlanEditor> {
   void initState() {
     super.initState();
     final plan = widget.plan;
+    final draft = plan == null ? widget.initialDraft : null;
     final today = widget.initialDate ?? dateOnly(DateTime.now());
+    final draftDate = draft?.schedule.localDate ?? '';
+    final initialPlanDate = draftDate.isEmpty ? today : draftDate;
     final id = plan?.id ?? 'plan-${DateTime.now().microsecondsSinceEpoch}';
-    name = TextEditingController(text: plan?.name ?? '');
-    description = TextEditingController(text: plan?.description ?? '');
-    startDate = plan?.startDate ?? today;
-    targetDate = plan?.targetDate ?? today;
+    name = TextEditingController(text: plan?.name ?? draft?.title ?? '');
+    description = TextEditingController(
+      text: plan?.description ?? draft?.description ?? '',
+    );
+    startDate = plan?.startDate ?? initialPlanDate;
+    targetDate = plan?.targetDate ?? initialPlanDate;
     calendarDisplayMode =
         plan?.calendarDisplayMode ?? PlanCalendarDisplayMode.wholePeriod;
-    reminders = [...?plan?.reminders];
+    reminders = plan?.reminders.toList() ?? _remindersFromDraft(draft);
     reminderEnabled = plan?.reminderEnabled ?? reminders.isNotEmpty;
     categoryName = plan?.categoryName ?? '';
     progress =
         plan?.progress ??
         widget.controller.progressSnapshot('plan-progress-$id');
-    selectedTags = {...?plan?.tags.map((tag) => tag.name)};
+    selectedTags = {...?plan?.tags.map((tag) => tag.name), ...?draft?.tags};
     selectedContacts = [...?plan?.contacts];
   }
 
@@ -539,6 +567,63 @@ class _PlanEditorState extends State<PlanEditor> {
       );
       reminderEnabled = true;
     });
+  }
+
+  List<TaskReminderRule> _remindersFromDraft(PlanningDraft? draft) {
+    if (draft == null ||
+        draft.reminders.intent != ReminderDraftIntent.specified) {
+      return <TaskReminderRule>[];
+    }
+    final mapped = <String, TaskReminderRule>{};
+    for (final source in draft.reminders.values) {
+      final absoluteAt = _absoluteReminderFromDraft(source, draft.schedule);
+      if (absoluteAt == null) continue;
+      final deliveryType = switch (source.deliveryType) {
+        PlanningReminderDeliveryType.notification =>
+          ReminderDeliveryType.notification,
+        PlanningReminderDeliveryType.alarm => ReminderDeliveryType.alarm,
+      };
+      final key = '${deliveryType.name}:${absoluteAt.toIso8601String()}';
+      mapped[key] = TaskReminderRule(
+        id: 'plan-reminder-${DateTime.now().microsecondsSinceEpoch}-${mapped.length}',
+        taskId: 'draft-plan',
+        type: ReminderRuleType.absolute,
+        absoluteAt: absoluteAt,
+        sortOrder: mapped.length,
+        deliveryType: deliveryType,
+      );
+    }
+    return mapped.values.toList();
+  }
+
+  DateTime? _absoluteReminderFromDraft(
+    ReminderDraft reminder,
+    ScheduledDraft schedule,
+  ) {
+    if (reminder.type == PlanningReminderRuleType.absolute) {
+      return reminder.absoluteAt?.toLocal();
+    }
+    if (!schedule.hasDate || !schedule.hasTime) return null;
+    final scheduledAt = DateTime.tryParse(
+      '${schedule.localDate}T${schedule.localTime}:00',
+    );
+    if (scheduledAt == null) return null;
+    if (reminder.type == PlanningReminderRuleType.relativeDuration) {
+      return scheduledAt.subtract(
+        Duration(minutes: reminder.offsetMinutes ?? 0),
+      );
+    }
+    final parts = (reminder.timeOfDay ?? '').split(':');
+    if (parts.length != 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return null;
+    final date = DateTime(
+      scheduledAt.year,
+      scheduledAt.month,
+      scheduledAt.day,
+    ).subtract(Duration(days: reminder.dayOffset ?? 0));
+    return DateTime(date.year, date.month, date.day, hour, minute);
   }
 
   Widget _buildTags(BuildContext context) {

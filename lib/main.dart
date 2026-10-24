@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'app_controller.dart';
 import 'app_database.dart';
 import 'home_shell.dart';
+import 'l10n/generated/app_localizations.dart';
 import 'welcome_page.dart';
 
 Future<void> main() async {
@@ -85,12 +85,8 @@ class ClPlanApp extends StatelessWidget {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         title: 'ClPlan',
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: const [Locale('zh', 'CN'), Locale('en')],
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         themeMode: mode,
         theme: _theme(Brightness.light, scale),
         darkTheme: _theme(Brightness.dark, scale),

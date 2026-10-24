@@ -9,6 +9,7 @@ import SwiftUI
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var alarmKitBridge: AlarmKitBridge?
+  private var developerTipPurchase: DeveloperTipPurchase?
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -20,6 +21,9 @@ import SwiftUI
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     alarmKitBridge = AlarmKitBridge(
+      messenger: engineBridge.applicationRegistrar.messenger()
+    )
+    developerTipPurchase = DeveloperTipPurchase(
       messenger: engineBridge.applicationRegistrar.messenger()
     )
   }

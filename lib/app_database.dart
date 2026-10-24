@@ -1474,6 +1474,23 @@ class AppDatabase {
       return parsed;
     }
 
+    Set<PlanCompletionStyle> completionStyles(
+      String key,
+      Set<PlanCompletionStyle> fallback, {
+      required Set<PlanCompletionStyle> allowed,
+    }) {
+      if (!values.containsKey(key)) return fallback;
+      final stored = values[key] ?? '';
+      if (stored.isEmpty) return const {};
+      final parsed = PlanCompletionStyle.values
+          .where(
+            (style) =>
+                allowed.contains(style) && stored.split(',').contains(style.name),
+          )
+          .toSet();
+      return parsed.isEmpty ? fallback : parsed;
+    }
+
     final legacyDensity = values['compact'] == 'true' ? 'small' : 'medium';
     final storedDensity = values['calendar_density'];
     final calendarDensity = {'small', 'medium', 'large'}.contains(storedDensity)
@@ -1499,6 +1516,34 @@ class AppDatabase {
         }
         return parsed;
       })(),
+      calendarMonthCompletionStyles: completionStyles(
+        'calendar_month_completion_styles',
+        const {
+          PlanCompletionStyle.dimText,
+          PlanCompletionStyle.strikethrough,
+        },
+        allowed: const {
+          PlanCompletionStyle.dimText,
+          PlanCompletionStyle.border,
+          PlanCompletionStyle.strikethrough,
+        },
+      ),
+      calendarWeekCompletionStyles: completionStyles(
+        'calendar_week_completion_styles',
+        const {
+          PlanCompletionStyle.dimText,
+          PlanCompletionStyle.check,
+        },
+        allowed: PlanCompletionStyle.values.toSet(),
+      ),
+      quadrantCompletionStyles: completionStyles(
+        'quadrant_completion_styles',
+        const {
+          PlanCompletionStyle.dimText,
+          PlanCompletionStyle.check,
+        },
+        allowed: PlanCompletionStyle.values.toSet(),
+      ),
       defaultReminderMinutes:
           int.tryParse(values['default_reminder_minutes'] ?? '') ?? -1,
       reminderSound: values['reminder_sound'] != 'false',

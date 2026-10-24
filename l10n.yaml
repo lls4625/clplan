@@ -1,0 +1,13 @@
+arb-dir: lib/l10n
+template-arb-file: app_zh_Hans.arb
+output-dir: lib/l10n/generated
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+synthetic-package: false
+nullable-getter: false
+preferred-supported-locales:
+  - zh_Hans
+  - zh_Hant
+  - ja
+  - ko
+  - en

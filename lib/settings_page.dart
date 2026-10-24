@@ -2,13 +2,20 @@ import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
 import 'contact_widgets.dart';
+import 'developer_tip.dart';
+import 'l10n/l10n.dart';
 import 'models.dart';
 import 'notification_service.dart';
 import 'xlsx_service.dart';
 
 class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key, required this.controller});
+  const SettingsPage({
+    super.key,
+    required this.controller,
+    required this.developerTipController,
+  });
   final AppController controller;
+  final DeveloperTipController developerTipController;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -22,6 +29,13 @@ class SettingsPage extends StatelessWidget {
             title: '外观与阅读',
             subtitle: '主题、字号与语言偏好',
             onTap: () => _openDetail(context, '外观与阅读', _appearanceDetail),
+          ),
+          _SettingsMenuItem(
+            icon: Icons.task_alt_outlined,
+            title: '计划完成样式',
+            subtitle: '月视图、周视图与四象限独立设置',
+            onTap: () =>
+                _openDetail(context, '计划完成样式', _completionStyleDetail),
           ),
           _SettingsMenuItem(
             icon: Icons.notifications_active_outlined,
@@ -108,6 +122,12 @@ class SettingsPage extends StatelessWidget {
             onTap: () => _openDetail(context, '帮助与反馈', _helpDetail),
           ),
           _SettingsMenuItem(
+            icon: Icons.volunteer_activism_outlined,
+            title: context.l10n.tipMenuTitle,
+            subtitle: context.l10n.tipMenuSubtitle,
+            onTap: () => showDeveloperTipPage(context, developerTipController),
+          ),
+          _SettingsMenuItem(
             icon: Icons.info_outline,
             title: '关于 ClPlan',
             subtitle: '应用信息、赞赏与评分',
@@ -165,6 +185,42 @@ class SettingsPage extends StatelessWidget {
         child: Text(
           '界面文案当前为简体中文；其他语言偏好已预留，后续版本逐步提供。',
           style: TextStyle(fontSize: 12),
+        ),
+      ),
+    ],
+  );
+
+  Widget _completionStyleDetail(BuildContext context) => Column(
+    children: [
+      _CompletionStyleEditor(
+        title: '月视图',
+        selected: controller.preferences.calendarMonthCompletionStyles,
+        available: const [
+          PlanCompletionStyle.dimText,
+          PlanCompletionStyle.border,
+          PlanCompletionStyle.strikethrough,
+        ],
+        onChanged: (styles) => controller.setPlanCompletionStyles(
+          PlanCompletionStyleScope.calendarMonth,
+          styles,
+        ),
+      ),
+      _CompletionStyleEditor(
+        title: '周视图',
+        selected: controller.preferences.calendarWeekCompletionStyles,
+        available: PlanCompletionStyle.values,
+        onChanged: (styles) => controller.setPlanCompletionStyles(
+          PlanCompletionStyleScope.calendarWeek,
+          styles,
+        ),
+      ),
+      _CompletionStyleEditor(
+        title: '四象限',
+        selected: controller.preferences.quadrantCompletionStyles,
+        available: PlanCompletionStyle.values,
+        onChanged: (styles) => controller.setPlanCompletionStyles(
+          PlanCompletionStyleScope.quadrant,
+          styles,
         ),
       ),
     ],
@@ -671,8 +727,9 @@ class SettingsPage extends StatelessWidget {
         spacing: 8,
         children: [
           OutlinedButton(
-            onPressed: () => _tips(context),
-            child: const Text('赞赏'),
+            onPressed: () =>
+                showDeveloperTipPage(context, developerTipController),
+            child: Text(context.l10n.tipMenuTitle),
           ),
           OutlinedButton(
             onPressed: () => _rating(context),
@@ -851,25 +908,6 @@ class SettingsPage extends StatelessWidget {
     _ => '',
   };
 
-  void _tips(BuildContext context) => showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('让好用的工具慢慢长大'),
-      content: const Text('赞赏功能即将开放。'),
-      actions: [
-        for (final amount in [6, 12, 30])
-          TextButton(
-            onPressed: () => _message(context, '赞赏功能即将开放'),
-            child: Text('¥$amount'),
-          ),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
-        ),
-      ],
-    ),
-  );
-
   void _rating(BuildContext context) => showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
@@ -1027,6 +1065,67 @@ class _Panel extends StatelessWidget {
         ],
       ),
     ),
+  );
+}
+
+class _CompletionStyleEditor extends StatelessWidget {
+  const _CompletionStyleEditor({
+    required this.title,
+    required this.selected,
+    required this.available,
+    required this.onChanged,
+  });
+
+  final String title;
+  final Set<PlanCompletionStyle> selected;
+  final List<PlanCompletionStyle> available;
+  final ValueChanged<Set<PlanCompletionStyle>> onChanged;
+
+  String _label(PlanCompletionStyle style) => switch (style) {
+    PlanCompletionStyle.dimText => '字体色置灰',
+    PlanCompletionStyle.check => '勾选',
+    PlanCompletionStyle.border => '边框',
+    PlanCompletionStyle.strikethrough => '贯穿线',
+  };
+
+  @override
+  Widget build(BuildContext context) => _Panel(
+    title: title,
+    children: [
+      CheckboxListTile(
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        dense: true,
+        title: const Text('无样式'),
+        value: selected.isEmpty,
+        checkboxSemanticLabel: '$title无样式',
+        onChanged: (checked) {
+          if (checked == true) {
+            onChanged(const <PlanCompletionStyle>{});
+          }
+        },
+      ),
+      ...available.map((style) {
+        final checked = selected.contains(style);
+        return CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          dense: true,
+          title: Text(_label(style)),
+          value: checked,
+          checkboxSemanticLabel: '$title${_label(style)}',
+          onChanged: (value) {
+            final next = Set<PlanCompletionStyle>.of(selected);
+            if (value == true) {
+              next.add(style);
+            } else {
+              next.remove(style);
+            }
+            onChanged(next);
+          },
+        );
+      }),
+    ],
   );
 }
 

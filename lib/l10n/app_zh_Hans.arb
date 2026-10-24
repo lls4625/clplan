@@ -1,0 +1,207 @@
+{
+  "@@locale": "zh_Hans",
+  "planningPlanTitle": "智能规划计划",
+  "@planningPlanTitle": {
+    "description": "新建计划时智能规划面板的标题"
+  },
+  "planningTaskTitle": "智能规划任务",
+  "@planningTaskTitle": {
+    "description": "新建任务时智能规划面板的标题"
+  },
+  "planningClose": "关闭",
+  "planningDiscardTitle": "放弃本次输入？",
+  "planningDiscardMessage": "尚未保存的规划内容和选择将会丢失。",
+  "planningContinueEditing": "继续编辑",
+  "planningDiscard": "放弃",
+  "planningPlanInputLabel": "输入计划内容",
+  "planningTaskInputLabel": "输入任务内容",
+  "planningInputHint": "例如：明天下午四点到机场接人",
+  "planningSuggestedTitle": "建议标题",
+  "planningAnalysisInProgress": "正在分析输入内容",
+  "planningAnalysisUnavailable": "暂时无法分析，可按原文继续填写。",
+  "planningAlarmUnsupported": "当前设备不支持闹铃，请先处理这条建议。",
+  "planningConvertToNotification": "改为通知",
+  "planningRemoveReminder": "移除提醒",
+  "planningUseRawText": "按原文填写",
+  "planningApplyAndContinue": "应用并继续",
+  "planningSourceBasicModelNotInstalled": "由本机基础规则生成 · 当前未安装语言模型",
+  "planningSourceBasic": "由本机基础规则生成",
+  "planningSourceModel": "由本机语言模型生成",
+  "planningScheduleDate": "安排日期 {date}",
+  "@planningScheduleDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "planningSetScheduleDate": "设置安排日期",
+  "planningScheduleTime": "安排时间 {time}",
+  "@planningScheduleTime": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "planningSetScheduleTime": "设置安排时间",
+  "planningRemoveScheduleTime": "移除安排时间",
+  "planningRemoveSchedule": "移除日期与时间",
+  "planningReminderUseDefault": "提醒：使用当前默认设置",
+  "planningReminderNone": "提醒：无",
+  "planningRemoveReminderTooltip": "移除提醒",
+  "planningDeliveryAlarm": "闹铃",
+  "planningDeliveryNotification": "通知",
+  "planningReminderOnTime": "准时",
+  "planningReminderMinutesBefore": "提前 {minutes} 分钟",
+  "@planningReminderMinutesBefore": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "planningReminderHoursBefore": "提前 {hours} 小时",
+  "@planningReminderHoursBefore": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "planningReminderDaysBefore": "提前 {days} 天",
+  "@planningReminderDaysBefore": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "planningReminderWithDelivery": "{reminder} · {delivery}",
+  "@planningReminderWithDelivery": {
+    "placeholders": {
+      "reminder": {
+        "type": "String"
+      },
+      "delivery": {
+        "type": "String"
+      }
+    }
+  },
+  "planningReminderDayTime": "提前 {days} 天 {time} · {delivery}",
+  "@planningReminderDayTime": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      },
+      "delivery": {
+        "type": "String"
+      }
+    }
+  },
+  "planningReminderAbsolute": "{time} · {delivery}",
+  "@planningReminderAbsolute": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "delivery": {
+        "type": "String"
+      }
+    }
+  },
+  "planningSpecifiedTime": "指定时间",
+  "planningTagSemantics": "标签 {tag}",
+  "@planningTagSemantics": {
+    "placeholders": {
+      "tag": {
+        "type": "String"
+      }
+    }
+  },
+  "planningNeedsConfirmation": "需要确认",
+  "planningAmbiguityBareHour": "这个时间是凌晨还是下午？",
+  "planningAmbiguityTimeNeedsDate": "这个时间安排在哪一天？",
+  "planningAmbiguityFallback": "请选择一个明确结果。",
+  "planningChoiceNoTime": "暂不设置时间",
+  "planningChoiceNoDate": "暂不设置日期",
+  "planningWarningEmptyTitle": "没有提取到可用标题，请修改输入或按原文填写。",
+  "planningWarningPastSchedule": "识别到的安排时间已经过去，请修改日期或时间。",
+  "planningWarningPastReminder": "识别到的提醒时间已经过去，请修改或移除提醒。",
+  "planningWarningMissingDateForTime": "安排时间需要同时设置日期，请选择日期或移除时间。",
+  "planningWarningMissingReminderSchedule": "相对提醒需要完整的安排日期和时间，请补充安排或移除提醒。",
+  "planningWarningInputTooLong": "输入最多 100 个字符。",
+  "planningWarningLocaleNotSupported": "当前只支持简体中文基础规划，将按原文处理。",
+  "planningWarningUnsupportedComplexTime": "包含多个时间表达，当前基础规划无法可靠处理，请按原文填写。",
+  "planningWarningFallback": "包含暂不支持的表达，可按原文继续填写。",
+  "planningBlockingWarningSemantics": "阻断：{message}",
+  "@planningBlockingWarningSemantics": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "planningAdvisoryWarningSemantics": "提示：{message}",
+  "@planningAdvisoryWarningSemantics": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "tipTitle": "打赏开发者",
+  "tipMenuTitle": "打赏开发者",
+  "tipMenuSubtitle": "通过 App Store 自愿支持，不解锁任何功能",
+  "tipHeading": "感谢你的支持",
+  "tipMotivation": "你的每一份鼓励，都是 ClPlan 不断完善的动力。",
+  "tipExplanation": "打赏完全自愿，是一次性、可重复购买的 App Store 消耗型项目；不解锁任何功能或内容，不影响免费使用，且不可恢复。",
+  "tipLoadingProducts": "正在加载商品…",
+  "tipReloadProducts": "重新加载商品",
+  "tipNoProducts": "暂未获取到商品，请稍后重试",
+  "tipSomeProductsUnavailable": "部分商品暂不可用，请稍后重试。",
+  "tipPurchasesNotAllowed": "当前设备不允许购买。",
+  "tipServiceUnavailable": "打赏服务暂不可用，请稍后重试",
+  "tipStorageError": "打赏记录暂时无法保存，已暂停新的购买。请重新核对；已有支付不会自动重试。",
+  "tipStorageCorrupt": "打赏记录无法安全读取，已暂停购买。请勿卸载或清空数据；可联系用户支持 QQ 群：1126527885。",
+  "tipUnresolved": "支付结果或请求关联仍待确认。请先重新核对；再次购买可能产生另一笔付款。",
+  "tipReconcile": "重新核对",
+  "tipChecking": "正在核对…",
+  "tipBuyAgain": "再次购买",
+  "tipBuyAgainWarning": "之前的请求仍可能完成付款。本次将发起新的购买，可能产生另一笔付款。确定继续吗？",
+  "tipIosOnly": "请在 iPhone 或 iPad 上支持开发者",
+  "tipProductsUnavailable": "商品暂不可用，请稍后重新加载",
+  "tipPurchaseRestricted": "当前设备不允许购买",
+  "tipProductsLoadFailed": "商品加载失败，请检查网络后重试",
+  "tipPurchaseBusy": "正在处理购买，请稍候",
+  "tipProductInvalid": "请先重新加载商品",
+  "tipVerificationFailed": "购买尚未通过验证，请重新核对支付结果，暂勿重复购买。",
+  "tipPurchasePending": "购买待批准，批准后会自动完成感谢",
+  "tipProductSmall": "一份鼓励",
+  "tipProductMedium": "暖心支持",
+  "tipProductLarge": "特别支持",
+  "tipProductXLarge": "大力支持",
+  "tipProductPremium": "顶级鼓励",
+  "tipProductStrong": "鼎力支持",
+  "tipThanks": "感谢你的「{support}」！",
+  "@tipThanks": {
+    "placeholders": {
+      "support": {"type": "String"}
+    }
+  },
+  "tipThanksStatic": "感谢你的支持。",
+  "tipThanksEcho": "愿每一份热爱都有回响。",
+  "tipClose": "关闭",
+  "tipSkip": "跳过",
+  "tipCancel": "取消",
+  "tipProductSemantics": "{name}，{price}",
+  "@tipProductSemantics": {
+    "placeholders": {
+      "name": {"type": "String"},
+      "price": {"type": "String"}
+    }
+  }
+}
