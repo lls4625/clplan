@@ -38,9 +38,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     developerTipController = DeveloperTipController();
-    developerTipController
-      ..hostReady = () => mounted
-      ..onLightFeedback = _showLightTipFeedback;
+    developerTipController.hostReady = () => mounted;
+    developerTipController.onLightFeedback = _showLightTipFeedback;
     statCriteria = StatCriteria.initial();
     planSearchCriteria = PlanSearchCriteria.initial();
   }
