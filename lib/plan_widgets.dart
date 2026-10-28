@@ -48,7 +48,10 @@ class PlanCard extends StatelessWidget {
         ).map((name) {
           final tag = tagsByName[name]!;
           return CardTagItem(
-            name: tag.name,
+            name: controller.displayTagName(
+              tag,
+              Localizations.localeOf(context),
+            ),
             icon: taskTagIcons[tag.iconName] ?? Icons.label_outline,
             color: Color(tag.colorValue),
           );
@@ -78,7 +81,7 @@ class PlanCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
+                    child: RawText(
                       plan.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -92,14 +95,20 @@ class PlanCard extends StatelessWidget {
                   if (node != null)
                     if (detailedMode)
                       _PlanStatusBadge(
-                        name: node.name,
+                        name: controller.displayProgressNodeName(
+                          node,
+                          Localizations.localeOf(context),
+                        ),
                         color: color,
                         onTap: progressUpdating ? null : onProgressTap,
                         updating: progressUpdating,
                       )
                     else
-                      Text(
-                        node.name,
+                      RawText(
+                        controller.displayProgressNodeName(
+                          node,
+                          Localizations.localeOf(context),
+                        ),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: color,
                           fontWeight: FontWeight.w600,
@@ -109,7 +118,7 @@ class PlanCard extends StatelessWidget {
               ),
               if (plan.description.trim().isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text(
+                RawText(
                   plan.description,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -125,12 +134,12 @@ class PlanCard extends StatelessWidget {
                     runSpacing: 5,
                     children: [
                       if (plan.categoryName.isNotEmpty)
-                        Text(
-                          '◇ ${plan.categoryName}',
+                        RawText(
+                          '◇ ${controller.displayCategoryName(plan.sourceCategoryId, plan.categoryName, Localizations.localeOf(context))}',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       if (plan.contacts.isNotEmpty)
-                        Text(
+                        RawText(
                           '♙ ${[plan.contacts.first.name, plan.contacts.first.phone].where((value) => value.trim().isNotEmpty).join(' ')}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -280,7 +289,7 @@ class _EditablePlanCardState extends State<EditablePlanCard> {
                     style: Theme.of(sheetContext).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 4),
-                  Text(
+                  RawText(
                     widget.plan.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -301,7 +310,12 @@ class _EditablePlanCardState extends State<EditablePlanCard> {
                     shape: BoxShape.circle,
                   ),
                 ),
-                title: Text(node.name),
+                title: RawText(
+                  widget.controller.displayProgressNodeName(
+                    node,
+                    Localizations.localeOf(sheetContext),
+                  ),
+                ),
                 trailing: selected
                     ? Icon(Icons.check_circle, color: color)
                     : null,
@@ -345,7 +359,13 @@ class _EditablePlanCardState extends State<EditablePlanCard> {
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('删除计划？'),
-            content: Text('确定删除“${widget.plan.name}”吗？存在任务的计划需要先清空任务。'),
+            content: RawText(
+              localizeUiTextWithArguments(
+                dialogContext,
+                '确定删除“{0}”吗？存在任务的计划需要先清空任务。',
+                [widget.plan.name],
+              ),
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
@@ -401,7 +421,7 @@ class _PlanStatusBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Flexible(
-            child: Text(
+            child: RawText(
               name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

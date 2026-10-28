@@ -4,11 +4,22 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart' hide Text;
 
 import 'l10n/ui_text.dart';
+import 'security/app_security_service.dart';
+import 'ui/app_alert.dart';
+
+enum _WelcomeAccessState { countdown, authenticating, waitingForRetry }
 
 class WelcomePage extends StatefulWidget {
-  const WelcomePage({super.key, required this.child});
+  const WelcomePage({
+    super.key,
+    required this.child,
+    required this.securityService,
+    required this.requireAuthentication,
+  });
 
   final Widget child;
+  final AppSecurityService securityService;
+  final bool requireAuthentication;
 
   @override
   State<WelcomePage> createState() => _WelcomePageState();
@@ -18,21 +29,66 @@ class _WelcomePageState extends State<WelcomePage> {
   Timer? _timer;
   int _secondsRemaining = 5;
   bool _entered = false;
+  late _WelcomeAccessState _accessState;
 
   @override
   void initState() {
     super.initState();
+    _accessState = widget.requireAuthentication
+        ? _WelcomeAccessState.authenticating
+        : _WelcomeAccessState.countdown;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _entered) return;
-      _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (!mounted || _entered) return;
-        if (_secondsRemaining <= 1) {
-          _enterApp();
-        } else {
-          setState(() => _secondsRemaining--);
-        }
-      });
+      if (widget.requireAuthentication) {
+        _authenticateAndEnter();
+      } else {
+        _startCountdown();
+      }
     });
+  }
+
+  void _startCountdown() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _entered) return;
+      if (_secondsRemaining <= 1) {
+        _enterApp();
+      } else {
+        setState(() => _secondsRemaining--);
+      }
+    });
+  }
+
+  Future<void> _authenticateAndEnter() async {
+    if (!mounted || _entered) return;
+    setState(() => _accessState = _WelcomeAccessState.authenticating);
+    final result = await widget.securityService.authenticate(
+      localizedReason: localizeUiText(
+        context,
+        '验证设备所有者以进入 ClPlan',
+      ),
+    );
+    if (!mounted || _entered) return;
+    if (result.succeeded) {
+      _enterApp();
+      return;
+    }
+    setState(() => _accessState = _WelcomeAccessState.waitingForRetry);
+    if (!result.canceled) _showAuthenticationError(result);
+  }
+
+  void _showAuthenticationError(AppAuthenticationResult result) {
+    final message = switch (result.outcome) {
+      AppAuthenticationOutcome.unavailable =>
+        '请先在系统设置中设置设备密码或生物识别。',
+      AppAuthenticationOutcome.lockedOut =>
+        '系统认证已暂时锁定，请稍后重试或使用设备密码。',
+      _ => '系统无法完成身份验证，请重试。',
+    };
+    showAppAlert(
+      context,
+      title: '无法验证身份',
+      message: message,
+    );
   }
 
   void _enterApp() {
@@ -50,6 +106,10 @@ class _WelcomePageState extends State<WelcomePage> {
   @override
   Widget build(BuildContext context) {
     if (_entered) return widget.child;
+
+    final authenticationRequired = widget.requireAuthentication;
+    final authenticating =
+        _accessState == _WelcomeAccessState.authenticating;
 
     return Scaffold(
       body: SafeArea(
@@ -90,18 +150,29 @@ class _WelcomePageState extends State<WelcomePage> {
                       ),
                     ),
                     const Spacer(),
-                    Text(
-                      '$_secondsRemaining 秒后自动进入',
-                      style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
+                    if (!authenticationRequired)
+                      Text(
+                        '$_secondsRemaining 秒后自动进入',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
                     const SizedBox(height: 22),
                     SizedBox(
                       width: double.infinity,
                       height: 56,
                       child: FilledButton(
-                        onPressed: _enterApp,
-                        child: const Text('开始规划'),
+                        onPressed: authenticating
+                            ? null
+                            : authenticationRequired
+                            ? _authenticateAndEnter
+                            : _enterApp,
+                        child: Text(
+                          authenticationRequired
+                              ? authenticating
+                                    ? '验证中…'
+                                    : '验证并进入'
+                              : '开始规划',
+                        ),
                       ),
                     ),
                     const SizedBox(height: 10),

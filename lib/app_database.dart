@@ -14,7 +14,7 @@ class AppDatabase {
     final root = await getDatabasesPath();
     return openDatabase(
       p.join(root, 'clplan.sqlite3'),
-      version: 14,
+      version: 15,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = OFF');
         await db.setJournalMode('WAL');
@@ -26,7 +26,8 @@ class AppDatabase {
             name TEXT NOT NULL,
             color_value INTEGER NOT NULL,
             completed INTEGER NOT NULL DEFAULT 0,
-            sort_order INTEGER NOT NULL
+            sort_order INTEGER NOT NULL,
+            name_source TEXT NOT NULL DEFAULT 'user'
           )
         ''');
         await db.execute('''
@@ -76,10 +77,11 @@ class AppDatabase {
         await db.execute('''
           CREATE TABLE tag_definitions (
             id TEXT PRIMARY KEY,
-            name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            name TEXT NOT NULL COLLATE NOCASE,
             color_value INTEGER NOT NULL,
             icon_name TEXT NOT NULL,
-            sort_order INTEGER NOT NULL
+            sort_order INTEGER NOT NULL,
+            name_source TEXT NOT NULL DEFAULT 'user'
           )
         ''');
         await _seedQuadrantTags(db);
@@ -226,11 +228,18 @@ class AppDatabase {
           await db.delete('table_columns');
           await _seedPlanColumns(db);
         }
+        if (oldVersion < 15) {
+          await _upgradeToVersion15(db);
+        }
       },
     );
   }
 
   Future<void> _seedQuadrantTags(DatabaseExecutor db) async {
+    final tagColumns = await db.rawQuery('PRAGMA table_info(tag_definitions)');
+    final supportsNameSource = tagColumns.any(
+      (column) => column['name'] == 'name_source',
+    );
     final existing = await db.query('tag_definitions');
     for (final row in existing) {
       final name = row['name']! as String;
@@ -250,7 +259,14 @@ class AppDatabase {
         limit: 1,
       );
       if (matching.isEmpty) {
-        await db.insert('tag_definitions', tag.toMap());
+        final values = tag
+            .copyWith(nameSource: NameSource.system)
+            .toMap();
+        if (!supportsNameSource) values.remove('name_source');
+        await db.insert(
+          'tag_definitions',
+          values,
+        );
       } else {
         await db.update(
           'tag_definitions',
@@ -288,18 +304,247 @@ class AppDatabase {
     await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
   }
 
+  Future<void> _upgradeToVersion15(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'task_statuses',
+      'name_source',
+      "TEXT NOT NULL DEFAULT 'user'",
+    );
+    await _addColumnIfMissing(
+      db,
+      'tag_definitions',
+      'name_source',
+      "TEXT NOT NULL DEFAULT 'user'",
+    );
+    await _addColumnIfMissing(
+      db,
+      'category_definitions',
+      'name_source',
+      "TEXT NOT NULL DEFAULT 'user'",
+    );
+    await _addColumnIfMissing(
+      db,
+      'progress_templates',
+      'name_source',
+      "TEXT NOT NULL DEFAULT 'user'",
+    );
+    await _addColumnIfMissing(
+      db,
+      'progress_template_nodes',
+      'name_source',
+      "TEXT NOT NULL DEFAULT 'user'",
+    );
+    await _addColumnIfMissing(
+      db,
+      'progress_instances',
+      'template_name_source',
+      "TEXT NOT NULL DEFAULT 'user'",
+    );
+    await _addColumnIfMissing(
+      db,
+      'progress_instance_nodes',
+      'name_source',
+      "TEXT NOT NULL DEFAULT 'user'",
+    );
+    await _addColumnIfMissing(db, 'plans', 'source_category_id', 'TEXT');
+
+    await db.execute('ALTER TABLE tag_definitions RENAME TO tag_definitions_v14');
+    await db.execute('''
+      CREATE TABLE tag_definitions (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL COLLATE NOCASE,
+        color_value INTEGER NOT NULL,
+        icon_name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL,
+        name_source TEXT NOT NULL DEFAULT 'user'
+      )
+    ''');
+    await db.execute('''
+      INSERT INTO tag_definitions
+        (id, name, color_value, icon_name, sort_order, name_source)
+      SELECT id, name, color_value, icon_name, sort_order, name_source
+      FROM tag_definitions_v14
+    ''');
+    await db.execute('DROP TABLE tag_definitions_v14');
+
+    await db.execute(
+      'ALTER TABLE category_definitions RENAME TO category_definitions_v14',
+    );
+    await db.execute('''
+      CREATE TABLE category_definitions (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL COLLATE NOCASE,
+        color_value INTEGER NOT NULL,
+        icon_name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL,
+        name_source TEXT NOT NULL DEFAULT 'user'
+      )
+    ''');
+    await db.execute('''
+      INSERT INTO category_definitions
+        (id, name, color_value, icon_name, sort_order, name_source)
+      SELECT id, name, color_value, icon_name, sort_order, name_source
+      FROM category_definitions_v14
+    ''');
+    await db.execute('DROP TABLE category_definitions_v14');
+
+    await db.execute(
+      'ALTER TABLE progress_templates RENAME TO progress_templates_v14',
+    );
+    await db.execute('''
+      CREATE TABLE progress_templates (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL COLLATE NOCASE,
+        sort_order INTEGER NOT NULL,
+        name_source TEXT NOT NULL DEFAULT 'user'
+      )
+    ''');
+    await db.execute('''
+      INSERT INTO progress_templates (id, name, sort_order, name_source)
+      SELECT id, name, sort_order, name_source
+      FROM progress_templates_v14
+    ''');
+    await db.execute('DROP TABLE progress_templates_v14');
+
+    final systemTags = [...defaultQuadrantTags, ...defaultOrdinaryTags];
+    for (final item in systemTags) {
+      await db.update(
+        'tag_definitions',
+        {'name_source': NameSource.system.name},
+        where: 'id = ? AND name = ?',
+        whereArgs: [item.id, item.name],
+      );
+    }
+    for (final item in defaultCategoryDefinitions) {
+      await db.update(
+        'category_definitions',
+        {'name_source': NameSource.system.name},
+        where: 'id = ? AND name = ?',
+        whereArgs: [item.id, item.name],
+      );
+    }
+    for (final template in defaultProgressTemplates) {
+      await db.update(
+        'progress_templates',
+        {'name_source': NameSource.system.name},
+        where: 'id = ? AND name = ?',
+        whereArgs: [template.id, template.name],
+      );
+      for (final node in template.nodes) {
+        await db.update(
+          'progress_template_nodes',
+          {'name_source': NameSource.system.name},
+          where: 'id = ? AND name = ?',
+          whereArgs: [node.id, node.name],
+        );
+      }
+    }
+    await db.update(
+      'progress_templates',
+      {'name_source': NameSource.system.name},
+      where: 'id = ? AND name = ?',
+      whereArgs: ['default-progress', '默认进度'],
+    );
+    const statusNames = {
+      'todo': '未开始',
+      'doing': '进行中',
+      'waiting': '等待反馈',
+      'done': '已完成',
+    };
+    for (final entry in statusNames.entries) {
+      await db.update(
+        'task_statuses',
+        {'name_source': NameSource.system.name},
+        where: 'id = ? AND name = ?',
+        whereArgs: [entry.key, entry.value],
+      );
+    }
+
+    final systemTemplateNames = <String, Set<String>>{
+      for (final template in defaultProgressTemplates)
+        template.id: {
+          template.name,
+          if (template.id == 'default-progress') '默认进度',
+        },
+    };
+    final progressInstances = await db.query('progress_instances');
+    for (final row in progressInstances) {
+      final templateId = row['source_template_id'] as String?;
+      final names = systemTemplateNames[templateId];
+      if (names == null || !names.contains(row['template_name'])) continue;
+      await db.update(
+        'progress_instances',
+        {'template_name_source': NameSource.system.name},
+        where: 'id = ?',
+        whereArgs: [row['id']],
+      );
+    }
+    final systemNodes = <String, ProgressNode>{
+      for (final template in defaultProgressTemplates)
+        for (final node in template.nodes) node.id: node,
+    };
+    final instanceNodes = await db.query('progress_instance_nodes');
+    for (final row in instanceNodes) {
+      ProgressNode? matched;
+      final sourceId = row['source_node_id'] as String?;
+      if (sourceId != null) matched = systemNodes[sourceId];
+      if (matched == null) {
+        final rowId = row['id']! as String;
+        for (final node in systemNodes.values) {
+          if (rowId.endsWith(node.id) && row['name'] == node.name) {
+            matched = node;
+            break;
+          }
+        }
+      }
+      if (matched == null || row['name'] != matched.name) continue;
+      await db.update(
+        'progress_instance_nodes',
+        {
+          'source_node_id': matched.id,
+          'name_source': NameSource.system.name,
+        },
+        where: 'id = ?',
+        whereArgs: [row['id']],
+      );
+    }
+
+    await db.execute('''
+      UPDATE plans
+      SET source_category_id = (
+        SELECT id FROM category_definitions
+        WHERE category_definitions.name = plans.category_name
+        LIMIT 1
+      )
+      WHERE source_category_id IS NULL
+        AND category_name <> ''
+        AND (
+          SELECT COUNT(*) FROM category_definitions
+          WHERE category_definitions.name = plans.category_name
+        ) = 1
+    ''');
+  }
+
   Future<void> _seedStarterDefinitions(DatabaseExecutor db) async {
     for (final category in defaultCategoryDefinitions) {
-      await db.insert('category_definitions', category.toMap());
+      await db.insert(
+        'category_definitions',
+        category.copyWith(nameSource: NameSource.system).toMap(),
+      );
     }
     for (final tag in defaultOrdinaryTags) {
-      await db.insert('tag_definitions', tag.toMap());
+      await db.insert(
+        'tag_definitions',
+        tag.copyWith(nameSource: NameSource.system).toMap(),
+      );
     }
     for (final template in defaultProgressTemplates) {
       await db.insert('progress_templates', {
         'id': template.id,
         'name': template.name,
         'sort_order': template.sortOrder,
+        'name_source': NameSource.system.name,
       });
       for (final node in template.nodes) {
         await db.insert('progress_template_nodes', {
@@ -309,6 +554,7 @@ class AppDatabase {
           'color_value': node.colorValue,
           'kind': node.kind.name,
           'sort_order': node.sortOrder,
+          'name_source': NameSource.system.name,
         });
       }
     }
@@ -390,17 +636,19 @@ class AppDatabase {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS category_definitions (
         id TEXT PRIMARY KEY,
-        name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+        name TEXT NOT NULL COLLATE NOCASE,
         color_value INTEGER NOT NULL,
         icon_name TEXT NOT NULL,
-        sort_order INTEGER NOT NULL
+        sort_order INTEGER NOT NULL,
+        name_source TEXT NOT NULL DEFAULT 'user'
       )
     ''');
     await db.execute('''
       CREATE TABLE IF NOT EXISTS progress_templates (
         id TEXT PRIMARY KEY,
-        name TEXT NOT NULL COLLATE NOCASE UNIQUE,
-        sort_order INTEGER NOT NULL
+        name TEXT NOT NULL COLLATE NOCASE,
+        sort_order INTEGER NOT NULL,
+        name_source TEXT NOT NULL DEFAULT 'user'
       )
     ''');
     await db.execute('''
@@ -410,7 +658,8 @@ class AppDatabase {
         name TEXT NOT NULL,
         color_value INTEGER NOT NULL,
         kind TEXT NOT NULL,
-        sort_order INTEGER NOT NULL
+        sort_order INTEGER NOT NULL,
+        name_source TEXT NOT NULL DEFAULT 'user'
       )
     ''');
     await db.execute('''
@@ -420,6 +669,7 @@ class AppDatabase {
         owner_id TEXT NOT NULL,
         source_template_id TEXT,
         template_name TEXT NOT NULL,
+        template_name_source TEXT NOT NULL DEFAULT 'user',
         current_node_id TEXT NOT NULL,
         UNIQUE(owner_type, owner_id)
       )
@@ -430,6 +680,7 @@ class AppDatabase {
         instance_id TEXT NOT NULL,
         source_node_id TEXT,
         name TEXT NOT NULL,
+        name_source TEXT NOT NULL DEFAULT 'user',
         color_value INTEGER NOT NULL,
         kind TEXT NOT NULL,
         sort_order INTEGER NOT NULL
@@ -443,6 +694,7 @@ class AppDatabase {
         start_date TEXT NOT NULL,
         target_date TEXT NOT NULL,
         category_name TEXT NOT NULL DEFAULT '',
+        source_category_id TEXT,
         category_color_value INTEGER NOT NULL DEFAULT 4287532691,
         category_icon_name TEXT NOT NULL DEFAULT 'project',
         calendar_display_mode TEXT NOT NULL DEFAULT 'whole_period',
@@ -637,6 +889,7 @@ class AppDatabase {
         'id': 'default-progress',
         'name': '默认进度',
         'sort_order': 0,
+        'name_source': NameSource.system.name,
       });
       final statuses = await db.query('task_statuses', orderBy: 'sort_order');
       final firstOpen = statuses.indexWhere((row) => row['completed'] == 0);
@@ -650,6 +903,7 @@ class AppDatabase {
           'color_value': 0xff8e8e93,
           'kind': 'start',
           'sort_order': 0,
+          'name_source': NameSource.system.name,
         });
       }
       for (var i = 0; i < statuses.length; i++) {
@@ -662,6 +916,7 @@ class AppDatabase {
           'color_value': status['color_value'],
           'kind': completed ? 'end' : (i == firstOpen ? 'start' : 'middle'),
           'sort_order': i + offset,
+          'name_source': NameSource.system.name,
         });
       }
       if (!hasCompleted) {
@@ -672,6 +927,7 @@ class AppDatabase {
           'color_value': 0xff34c759,
           'kind': 'end',
           'sort_order': statuses.length + offset,
+          'name_source': NameSource.system.name,
         });
       }
     }
@@ -703,6 +959,7 @@ class AppDatabase {
           'instance_id': instanceId,
           'source_node_id': node['id'],
           'name': node['name'],
+          'name_source': node['name_source'] ?? NameSource.system.name,
           'color_value': node['color_value'],
           'kind': node['kind'],
           'sort_order': node['sort_order'],
@@ -714,6 +971,7 @@ class AppDatabase {
         'owner_id': taskId,
         'source_template_id': 'default-progress',
         'template_name': '默认进度',
+        'template_name_source': NameSource.system.name,
         'current_node_id': currentId,
       });
     }
@@ -772,7 +1030,10 @@ class AppDatabase {
       ),
     ];
     for (final status in statuses) {
-      await db.insert('task_statuses', status.toMap());
+      await db.insert(
+        'task_statuses',
+        status.copyWith(nameSource: NameSource.system).toMap(),
+      );
     }
     await _seedPlanColumns(db);
   }
@@ -901,6 +1162,8 @@ class AppDatabase {
             ProgressNode(
               id: row['id']! as String,
               name: row['name']! as String,
+              sourceNodeId: row['source_node_id'] as String?,
+              nameSource: nameSourceFromName(row['name_source'] as String?),
               colorValue: row['color_value']! as int,
               kind: progressNodeKindFromName(row['kind'] as String?),
               sortOrder: row['sort_order']! as int,
@@ -914,6 +1177,9 @@ class AppDatabase {
         instanceId: instanceId,
         sourceTemplateId: row['source_template_id'] as String?,
         templateName: row['template_name']! as String,
+        templateNameSource: nameSourceFromName(
+          row['template_name_source'] as String?,
+        ),
         currentNodeId: row['current_node_id']! as String,
         nodes: nodesByInstance[instanceId] ?? const [],
       );
@@ -994,6 +1260,8 @@ class AppDatabase {
             (node) => ProgressNode(
               id: node['id']! as String,
               name: node['name']! as String,
+              sourceNodeId: node['id']! as String,
+              nameSource: nameSourceFromName(node['name_source'] as String?),
               colorValue: node['color_value']! as int,
               kind: progressNodeKindFromName(node['kind'] as String?),
               sortOrder: node['sort_order']! as int,
@@ -1003,6 +1271,7 @@ class AppDatabase {
       return ProgressTemplate(
         id: id,
         name: row['name']! as String,
+        nameSource: nameSourceFromName(row['name_source'] as String?),
         sortOrder: row['sort_order']! as int,
         nodes: nodes,
       );
@@ -1111,6 +1380,7 @@ class AppDatabase {
         startDate: row['start_date']! as String,
         targetDate: row['target_date']! as String,
         categoryName: row['category_name']! as String,
+        sourceCategoryId: row['source_category_id'] as String?,
         categoryColorValue: row['category_color_value']! as int,
         categoryIconName: row['category_icon_name']! as String,
         tags: tagsByPlan[id] ?? const [],
@@ -1145,6 +1415,8 @@ class AppDatabase {
             ProgressNode(
               id: row['id']! as String,
               name: row['name']! as String,
+              sourceNodeId: row['source_node_id'] as String?,
+              nameSource: nameSourceFromName(row['name_source'] as String?),
               colorValue: row['color_value']! as int,
               kind: progressNodeKindFromName(row['kind'] as String?),
               sortOrder: row['sort_order']! as int,
@@ -1157,6 +1429,9 @@ class AppDatabase {
           instanceId: row['id']! as String,
           sourceTemplateId: row['source_template_id'] as String?,
           templateName: row['template_name']! as String,
+          templateNameSource: nameSourceFromName(
+            row['template_name_source'] as String?,
+          ),
           currentNodeId: row['current_node_id']! as String,
           nodes: nodes[row['id']! as String] ?? const [],
         ),
@@ -1173,6 +1448,7 @@ class AppDatabase {
         'start_date': plan.startDate,
         'target_date': plan.targetDate,
         'category_name': plan.categoryName,
+        'source_category_id': plan.sourceCategoryId,
         'category_color_value': plan.categoryColorValue,
         'category_icon_name': plan.categoryIconName,
         'calendar_display_mode': plan.calendarDisplayMode.storageName,
@@ -1444,7 +1720,7 @@ class AppDatabase {
                   'completed_at': null,
                   'origin_id': null,
                   'parent_task_id': null,
-                  'source_category_id': null,
+                  'source_category_id': plan.sourceCategoryId,
                   'category_color_value': plan.categoryColorValue,
                   'category_icon_name': plan.categoryIconName,
                   'plan_id': plan.id,
@@ -1487,6 +1763,8 @@ class AppDatabase {
                       (node) => ProgressNode(
                         id: '$instanceId-${node.id}',
                         name: node.name,
+                        sourceNodeId: node.sourceNodeId ?? node.id,
+                        nameSource: node.nameSource,
                         colorValue: node.colorValue,
                         kind: node.kind,
                         sortOrder: node.sortOrder,
@@ -1505,6 +1783,8 @@ class AppDatabase {
                     instanceId: instanceId,
                     sourceTemplateId: rule.progress.sourceTemplateId,
                     templateName: rule.progress.templateName,
+                    templateNameSource:
+                        rule.progress.templateNameSource,
                     currentNodeId: start.id,
                     nodes: clonedNodes,
                   ),
@@ -1616,6 +1896,10 @@ class AppDatabase {
       defaultReminderMinutes:
           int.tryParse(values['default_reminder_minutes'] ?? '') ?? -1,
       reminderSound: values['reminder_sound'] != 'false',
+      requireAuthenticationOnLaunch:
+          values['require_authentication_on_launch'] == 'true',
+      requireAuthenticationForExport:
+          values['require_authentication_for_export'] != 'false',
     );
   }
 
@@ -1769,11 +2053,25 @@ class AppDatabase {
 
   Future<void> saveTagDefinition(TaskTagDefinition tag) async {
     final db = await database;
-    await db.insert(
-      'tag_definitions',
-      tag.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.transaction((txn) async {
+      await txn.insert(
+        'tag_definitions',
+        tag.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await txn.update(
+        'task_tags',
+        {'tag': tag.name},
+        where: 'source_tag_id = ?',
+        whereArgs: [tag.id],
+      );
+      await txn.update(
+        'plan_tags',
+        {'name': tag.name},
+        where: 'source_tag_id = ?',
+        whereArgs: [tag.id],
+      );
+    });
   }
 
   Future<void> saveTagDefinitionOrder(
@@ -1794,11 +2092,25 @@ class AppDatabase {
 
   Future<void> saveCategoryDefinition(CategoryDefinition category) async {
     final db = await database;
-    await db.insert(
-      'category_definitions',
-      category.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.transaction((txn) async {
+      await txn.insert(
+        'category_definitions',
+        category.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await txn.update(
+        'tasks',
+        {'type': category.name},
+        where: 'source_category_id = ?',
+        whereArgs: [category.id],
+      );
+      await txn.update(
+        'plans',
+        {'category_name': category.name},
+        where: 'source_category_id = ?',
+        whereArgs: [category.id],
+      );
+    });
   }
 
   Future<void> saveCategoryDefinitionOrder(
@@ -1829,7 +2141,17 @@ class AppDatabase {
         'id': template.id,
         'name': template.name,
         'sort_order': template.sortOrder,
+        'name_source': template.nameSource.name,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.update(
+        'progress_instances',
+        {
+          'template_name': template.name,
+          'template_name_source': template.nameSource.name,
+        },
+        where: 'source_template_id = ?',
+        whereArgs: [template.id],
+      );
       await txn.delete(
         'progress_template_nodes',
         where: 'template_id = ?',
@@ -1844,7 +2166,17 @@ class AppDatabase {
           'color_value': node.colorValue,
           'kind': node.kind.name,
           'sort_order': i,
+          'name_source': node.nameSource.name,
         });
+        await txn.update(
+          'progress_instance_nodes',
+          {
+            'name': node.name,
+            'name_source': node.nameSource.name,
+          },
+          where: 'source_node_id = ?',
+          whereArgs: [node.id],
+        );
       }
     });
   }
@@ -1907,6 +2239,7 @@ class AppDatabase {
       'owner_id': ownerId,
       'source_template_id': progress.sourceTemplateId,
       'template_name': progress.templateName,
+      'template_name_source': progress.templateNameSource.name,
       'current_node_id': progress.currentNodeId,
     });
     for (var i = 0; i < progress.nodes.length; i++) {
@@ -1914,8 +2247,9 @@ class AppDatabase {
       await db.insert('progress_instance_nodes', {
         'id': node.id,
         'instance_id': progress.instanceId,
-        'source_node_id': null,
+        'source_node_id': node.sourceNodeId,
         'name': node.name,
+        'name_source': node.nameSource.name,
         'color_value': node.colorValue,
         'kind': node.kind.name,
         'sort_order': i,

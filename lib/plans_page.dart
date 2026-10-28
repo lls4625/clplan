@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' hide Text;
 
 import 'app_controller.dart';
 import 'models.dart';
+import 'l10n/preset_text.dart';
 import 'l10n/ui_text.dart';
 import 'plan_widgets.dart';
 import 'stable_filter_chip.dart';
@@ -324,6 +325,42 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
   late final TextEditingController _planController;
   late final TextEditingController _taskController;
 
+  String _categoryLabel(BuildContext context, String name) {
+    final definition = widget.controller.categoryDefinitionForName(name);
+    return definition == null
+        ? name
+        : categoryDefinitionName(definition, Localizations.localeOf(context));
+  }
+
+  String _templateLabel(BuildContext context, String name) {
+    ProgressTemplate? match;
+    for (final template in widget.controller.progressTemplates) {
+      if (template.name == name) match = template;
+    }
+    return match == null
+        ? name
+        : progressTemplateName(match, Localizations.localeOf(context));
+  }
+
+  String _tagLabel(BuildContext context, String name) {
+    final definition = widget.controller.tagDefinitionForName(name);
+    return definition == null
+        ? name
+        : tagDefinitionName(definition, Localizations.localeOf(context));
+  }
+
+  String _nodeLabel(BuildContext context, String name) {
+    for (final template in widget.controller.progressTemplates) {
+      if (template.name != widget.criteria.progressTemplateName) continue;
+      for (final node in template.nodes) {
+        if (node.name == name) {
+          return progressNodeName(node, Localizations.localeOf(context));
+        }
+      }
+    }
+    return name;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -510,8 +547,10 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                     items: [
                       const DropdownMenuItem(value: '', child: Text('全部分类')),
                       ...categories.map(
-                        (name) =>
-                            DropdownMenuItem(value: name, child: Text(name)),
+                        (name) => DropdownMenuItem(
+                          value: name,
+                          child: RawText(_categoryLabel(context, name)),
+                        ),
                       ),
                     ],
                     onChanged: (value) => widget.onChanged(
@@ -530,8 +569,10 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                     items: [
                       const DropdownMenuItem(value: '', child: Text('全部进度方案')),
                       ...templates.map(
-                        (name) =>
-                            DropdownMenuItem(value: name, child: Text(name)),
+                        (name) => DropdownMenuItem(
+                          value: name,
+                          child: RawText(_templateLabel(context, name)),
+                        ),
                       ),
                     ],
                     onChanged: (value) => widget.onChanged(
@@ -558,8 +599,10 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                           child: Text('该方案全部节点'),
                         ),
                         ...nodes.map(
-                          (name) =>
-                              DropdownMenuItem(value: name, child: Text(name)),
+                          (name) => DropdownMenuItem(
+                            value: name,
+                            child: RawText(_nodeLabel(context, name)),
+                          ),
                         ),
                       ],
                       onChanged: (value) => widget.onChanged(
@@ -579,7 +622,7 @@ class _PlanSearchDrawerState extends State<PlanSearchDrawer> {
                       children: tags.map((tag) {
                         final selected = widget.criteria.tags.contains(tag);
                         return StableFilterChip(
-                          label: tag,
+                          label: _tagLabel(context, tag),
                           selected: selected,
                           onSelected: (value) {
                             final next = {...widget.criteria.tags};

@@ -9,7 +9,50 @@ String localizeUiText(material.BuildContext context, String source) {
   );
 }
 
+String localizeUiTextWithArguments(
+  material.BuildContext context,
+  String source,
+  List<String> arguments,
+) {
+  var result = localizeUiText(context, source);
+  for (var index = 0; index < arguments.length; index++) {
+    result = result.replaceAll('{$index}', arguments[index]);
+  }
+  return result;
+}
+
 String localizeUiTextForLocale(material.Locale locale, String source) {
+  if (_hasExactTranslation(locale, source)) {
+    return _localizeUiTextForLocale(locale, source);
+  }
+  final protected = <String>[];
+  final safeSource = source.replaceAllMapped(RegExp(r'“([^”]*)”'), (match) {
+    final value = match.group(1)!;
+    if (RegExp(r'^\{\d+\}$').hasMatch(value)) return match.group(0)!;
+    final index = protected.length;
+    protected.add(value);
+    return '“\uE000$index\uE001”';
+  });
+  var result = _localizeUiTextForLocale(locale, safeSource);
+  for (var index = 0; index < protected.length; index++) {
+    result = result.replaceAll('\uE000$index\uE001', protected[index]);
+  }
+  return result;
+}
+
+bool _hasExactTranslation(material.Locale locale, String source) {
+  final language = locale.languageCode;
+  if (language == 'zh') {
+    return locale.scriptCode != 'Hant' || _traditionalChinese.containsKey(source);
+  }
+  return switch (language) {
+    'ja' => _japanese.containsKey(source) || _english.containsKey(source),
+    'ko' => _korean.containsKey(source) || _english.containsKey(source),
+    _ => _english.containsKey(source),
+  };
+}
+
+String _localizeUiTextForLocale(material.Locale locale, String source) {
   final language = locale.languageCode;
   final traditionalChinese = language == 'zh' && locale.scriptCode == 'Hant';
   if (language == 'zh' && !traditionalChinese) return source;
@@ -259,6 +302,11 @@ const Map<String, String> _english = {
   '浅色': 'Light',
   '深色': 'Dark',
   '简体中文': 'Simplified Chinese',
+  '确定删除“{0}”吗？': 'Delete “{0}”?',
+  '确定删除“{0}”吗？存在任务的计划需要先清空任务。':
+      'Delete “{0}”? Remove its tasks first if it contains any.',
+  '删除“{0}”联系人？': 'Delete contact “{0}”?',
+  '删除“{0}”标签配置？': 'Delete tag configuration “{0}”?',
   '显示与通知': 'Display & notifications',
   '计划完成样式': 'Completed plan style',
   '月视图、周视图与四象限独立设置': 'Set month, week, and quadrant views independently',
@@ -269,6 +317,34 @@ const Map<String, String> _english = {
   '标签': 'Tags',
   '联系人': 'Contacts',
   '数据与安全': 'Data & security',
+  '安全锁': 'Security lock',
+  'App 启动验证': 'Authenticate at app launch',
+  '导出验证': 'Export authentication',
+  '下次启动并显示欢迎页时验证':
+      'Authenticate next time the app launches and shows the welcome screen',
+  '验证后 30 分钟内无需重复验证':
+      'No additional authentication for 30 minutes',
+  '启动验证开启': 'Launch authentication on',
+  '启动验证关闭': 'Launch authentication off',
+  '导出验证开启': 'Export authentication on',
+  '导出验证关闭': 'Export authentication off',
+  '验证中…': 'Authenticating…',
+  '验证并进入': 'Authenticate and enter',
+  '验证设备所有者以进入 ClPlan':
+      'Authenticate as the device owner to enter ClPlan',
+  '验证设备所有者以导出 ClPlan 数据':
+      'Authenticate as the device owner to export ClPlan data',
+  '验证设备所有者以修改安全锁设置':
+      'Authenticate as the device owner to change security lock settings',
+  '无法验证身份': 'Unable to authenticate',
+  '请先在系统设置中设置设备密码或生物识别。':
+      'Set up a device passcode or biometrics in system settings first.',
+  '系统认证已暂时锁定，请稍后重试或使用设备密码。':
+      'System authentication is temporarily locked. Try again later or use the device passcode.',
+  '系统无法完成身份验证，请重试。':
+      'System authentication could not be completed. Try again.',
+  '安全锁设置保存失败，请重试。':
+      'The security lock settings could not be saved. Try again.',
   '表格与数据': 'Tables & data',
   '查看、导入、导出与列设置': 'View, import, export, and configure columns',
   '隐私与本地存储': 'Privacy & local storage',
@@ -589,6 +665,11 @@ const Map<String, String> _japanese = {
   '浅色': 'ライト',
   '深色': 'ダーク',
   '简体中文': '簡体字中国語',
+  '确定删除“{0}”吗？': '「{0}」を削除しますか？',
+  '确定删除“{0}”吗？存在任务的计划需要先清空任务。':
+      '「{0}」を削除しますか？タスクがある場合は先にすべて削除してください。',
+  '删除“{0}”联系人？': '連絡先「{0}」を削除しますか？',
+  '删除“{0}”标签配置？': 'タグ設定「{0}」を削除しますか？',
   '显示与通知': '表示と通知',
   '计划完成样式': '完了した計画の表示',
   '月视图、周视图与四象限独立设置': '月表示・週表示・四象限を個別に設定',
@@ -599,6 +680,27 @@ const Map<String, String> _japanese = {
   '标签': 'タグ',
   '联系人': '連絡先',
   '数据与安全': 'データとセキュリティ',
+  '安全锁': 'セキュリティロック',
+  'App 启动验证': 'App 起動時の認証',
+  '导出验证': 'エクスポート認証',
+  '下次启动并显示欢迎页时验证': '次回起動時にウェルカム画面で認証します',
+  '验证后 30 分钟内无需重复验证': '認証後30分間は再認証しません',
+  '启动验证开启': '起動時認証オン',
+  '启动验证关闭': '起動時認証オフ',
+  '导出验证开启': 'エクスポート認証オン',
+  '导出验证关闭': 'エクスポート認証オフ',
+  '验证中…': '認証中…',
+  '验证并进入': '認証して開始',
+  '验证设备所有者以进入 ClPlan': 'ClPlanを開くためにデバイス所有者を認証します',
+  '验证设备所有者以导出 ClPlan 数据': 'ClPlanデータを書き出すためにデバイス所有者を認証します',
+  '验证设备所有者以修改安全锁设置': 'セキュリティロック設定を変更するために認証します',
+  '无法验证身份': '認証できません',
+  '请先在系统设置中设置设备密码或生物识别。':
+      '先にシステム設定でデバイスのパスコードまたは生体認証を設定してください。',
+  '系统认证已暂时锁定，请稍后重试或使用设备密码。':
+      'システム認証は一時的にロックされています。後でもう一度試すか、デバイスのパスコードを使用してください。',
+  '系统无法完成身份验证，请重试。': 'システム認証を完了できませんでした。もう一度お試しください。',
+  '安全锁设置保存失败，请重试。': 'セキュリティロック設定を保存できませんでした。もう一度お試しください。',
   '表格与数据': '表とデータ',
   '查看、导入、导出与列设置': '表示・インポート・エクスポート・列設定',
   '隐私与本地存储': 'プライバシーとローカル保存',
@@ -925,6 +1027,11 @@ const Map<String, String> _korean = {
   '浅色': '라이트',
   '深色': '다크',
   '简体中文': '중국어 간체',
+  '确定删除“{0}”吗？': '“{0}”을(를) 삭제할까요?',
+  '确定删除“{0}”吗？存在任务的计划需要先清空任务。':
+      '“{0}”을(를) 삭제할까요? 작업이 있는 계획은 먼저 작업을 모두 삭제해야 합니다.',
+  '删除“{0}”联系人？': '연락처 “{0}”을(를) 삭제할까요?',
+  '删除“{0}”标签配置？': '태그 설정 “{0}”을(를) 삭제할까요?',
   '显示与通知': '화면 및 알림',
   '计划完成样式': '완료된 계획 스타일',
   '月视图、周视图与四象限独立设置': '월·주·사분면 보기를 각각 설정',
@@ -935,6 +1042,27 @@ const Map<String, String> _korean = {
   '标签': '태그',
   '联系人': '연락처',
   '数据与安全': '데이터 및 보안',
+  '安全锁': '보안 잠금',
+  'App 启动验证': '앱 시작 인증',
+  '导出验证': '내보내기 인증',
+  '下次启动并显示欢迎页时验证': '다음 실행 시 시작 화면에서 인증합니다',
+  '验证后 30 分钟内无需重复验证': '인증 후 30분 동안 다시 인증하지 않습니다',
+  '启动验证开启': '시작 인증 켜짐',
+  '启动验证关闭': '시작 인증 꺼짐',
+  '导出验证开启': '내보내기 인증 켜짐',
+  '导出验证关闭': '내보내기 인증 꺼짐',
+  '验证中…': '인증 중…',
+  '验证并进入': '인증하고 들어가기',
+  '验证设备所有者以进入 ClPlan': 'ClPlan에 들어가려면 기기 소유자를 인증하세요',
+  '验证设备所有者以导出 ClPlan 数据': 'ClPlan 데이터를 내보내려면 기기 소유자를 인증하세요',
+  '验证设备所有者以修改安全锁设置': '보안 잠금 설정을 변경하려면 기기 소유자를 인증하세요',
+  '无法验证身份': '인증할 수 없음',
+  '请先在系统设置中设置设备密码或生物识别。':
+      '먼저 시스템 설정에서 기기 암호 또는 생체 인증을 설정하세요.',
+  '系统认证已暂时锁定，请稍后重试或使用设备密码。':
+      '시스템 인증이 일시적으로 잠겼습니다. 나중에 다시 시도하거나 기기 암호를 사용하세요.',
+  '系统无法完成身份验证，请重试。': '시스템 인증을 완료하지 못했습니다. 다시 시도하세요.',
+  '安全锁设置保存失败，请重试。': '보안 잠금 설정을 저장하지 못했습니다. 다시 시도하세요.',
   '表格与数据': '표 및 데이터',
   '查看、导入、导出与列设置': '보기·가져오기·내보내기·열 설정',
   '隐私与本地存储': '개인정보 및 로컬 저장소',
@@ -1252,6 +1380,27 @@ const Map<String, String> _korean = {
 const Map<String, String> _traditionalChinese = {
   '简体中文': '簡體中文',
   '繁體中文': '繁體中文',
+  '安全锁': '安全鎖',
+  'App 启动验证': 'App 啟動驗證',
+  '导出验证': '匯出驗證',
+  '下次启动并显示欢迎页时验证': '下次啟動並顯示歡迎頁時驗證',
+  '验证后 30 分钟内无需重复验证': '驗證後 30 分鐘內無需重複驗證',
+  '启动验证开启': '啟動驗證開啟',
+  '启动验证关闭': '啟動驗證關閉',
+  '导出验证开启': '匯出驗證開啟',
+  '导出验证关闭': '匯出驗證關閉',
+  '验证中…': '驗證中…',
+  '验证并进入': '驗證並進入',
+  '验证设备所有者以进入 ClPlan': '驗證裝置擁有者以進入 ClPlan',
+  '验证设备所有者以导出 ClPlan 数据': '驗證裝置擁有者以匯出 ClPlan 資料',
+  '验证设备所有者以修改安全锁设置': '驗證裝置擁有者以修改安全鎖設定',
+  '无法验证身份': '無法驗證身分',
+  '请先在系统设置中设置设备密码或生物识别。':
+      '請先在系統設定中設定裝置密碼或生物辨識。',
+  '系统认证已暂时锁定，请稍后重试或使用设备密码。':
+      '系統認證已暫時鎖定，請稍後重試或使用裝置密碼。',
+  '系统无法完成身份验证，请重试。': '系統無法完成身分驗證，請重試。',
+  '安全锁设置保存失败，请重试。': '安全鎖設定儲存失敗，請重試。',
 };
 
 const Map<String, String> _japaneseTerms = {
@@ -1522,6 +1671,67 @@ class Text extends material.StatelessWidget {
     semanticsLabel: semanticsLabel == null
         ? null
         : localizeUiText(context, semanticsLabel!),
+    semanticsIdentifier: semanticsIdentifier,
+    textWidthBasis: textWidthBasis,
+    textHeightBehavior: textHeightBehavior,
+    selectionColor: selectionColor,
+  );
+}
+
+/// Displays application or user-provided data exactly as stored.
+///
+/// Use this instead of the legacy localized [Text] wrapper for names, notes,
+/// labels, imported values, and other content that must not change when the
+/// application locale changes.
+class RawText extends material.StatelessWidget {
+  const RawText(
+    this.data, {
+    super.key,
+    this.style,
+    this.strutStyle,
+    this.textAlign,
+    this.textDirection,
+    this.locale,
+    this.softWrap,
+    this.overflow,
+    this.textScaler,
+    this.maxLines,
+    this.semanticsLabel,
+    this.semanticsIdentifier,
+    this.textWidthBasis,
+    this.textHeightBehavior,
+    this.selectionColor,
+  });
+
+  final String data;
+  final material.TextStyle? style;
+  final material.StrutStyle? strutStyle;
+  final material.TextAlign? textAlign;
+  final material.TextDirection? textDirection;
+  final material.Locale? locale;
+  final bool? softWrap;
+  final material.TextOverflow? overflow;
+  final material.TextScaler? textScaler;
+  final int? maxLines;
+  final String? semanticsLabel;
+  final String? semanticsIdentifier;
+  final material.TextWidthBasis? textWidthBasis;
+  final material.TextHeightBehavior? textHeightBehavior;
+  final material.Color? selectionColor;
+
+  @override
+  material.Widget build(material.BuildContext context) => material.Text(
+    data,
+    style: style,
+    strutStyle: strutStyle,
+    textAlign: textAlign,
+    textDirection: textDirection,
+    locale: locale,
+    softWrap: softWrap,
+    overflow: overflow,
+    textScaler: textScaler,
+    maxLines: maxLines,
+    semanticsLabel: semanticsLabel,
     semanticsIdentifier: semanticsIdentifier,
     textWidthBasis: textWidthBasis,
     textHeightBehavior: textHeightBehavior,

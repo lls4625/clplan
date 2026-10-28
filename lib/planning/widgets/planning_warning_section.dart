@@ -25,7 +25,7 @@ class PlanningWarningSection extends StatelessWidget {
         return Semantics(
           container: true,
           liveRegion: warning.isBlocking,
-          label: localizeUiText(context, semanticsLabel),
+          label: semanticsLabel,
           child: ExcludeSemantics(
             child: Container(
               width: double.infinity,
@@ -49,7 +49,10 @@ class PlanningWarningSection extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(message, style: TextStyle(color: foreground)),
+                    child: RawText(
+                      message,
+                      style: TextStyle(color: foreground),
+                    ),
                   ),
                 ],
               ),

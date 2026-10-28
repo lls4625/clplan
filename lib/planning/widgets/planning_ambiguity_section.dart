@@ -35,7 +35,7 @@ class PlanningAmbiguitySection extends StatelessWidget {
         children: [
           Semantics(
             header: true,
-            child: Text(
+            child: RawText(
               strings.planningNeedsConfirmation,
               style: Theme.of(context).textTheme.titleSmall
                   ?.copyWith(fontWeight: FontWeight.w700),

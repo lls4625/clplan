@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' hide Text;
 
 import 'app_controller.dart';
 import 'models.dart';
+import 'l10n/preset_text.dart';
 import 'l10n/ui_text.dart';
 import 'plan_editor.dart';
 import 'stable_filter_chip.dart';
@@ -87,6 +88,61 @@ class StatsPage extends StatefulWidget {
   final ValueChanged<StatCriteria> onCriteriaChanged;
   @override
   State<StatsPage> createState() => _StatsPageState();
+}
+
+class _StatViewSelector extends StatelessWidget {
+  const _StatViewSelector({
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final StatView selected;
+  final ValueChanged<StatView> onSelected;
+
+  @override
+  Widget build(BuildContext context) => SegmentedButton<StatView>(
+    expandedInsets: EdgeInsets.zero,
+    style: SegmentedButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+    ),
+    segments: const [
+      ButtonSegment(
+        value: StatView.plans,
+        label: _StatViewLabel('计划'),
+      ),
+      ButtonSegment(
+        value: StatView.tasks,
+        label: _StatViewLabel('任务'),
+      ),
+      ButtonSegment(
+        value: StatView.quadrant,
+        label: _StatViewLabel('四象限'),
+      ),
+      ButtonSegment(
+        value: StatView.tags,
+        label: _StatViewLabel('标签'),
+      ),
+    ],
+    selected: {selected},
+    showSelectedIcon: false,
+    onSelectionChanged: (selection) => onSelected(selection.first),
+  );
+}
+
+class _StatViewLabel extends StatelessWidget {
+  const _StatViewLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 20,
+    child: FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.center,
+      child: Text(label, maxLines: 1, softWrap: false),
+    ),
+  );
 }
 
 class _StatsPageState extends State<StatsPage>
@@ -256,17 +312,7 @@ class _StatsPageState extends State<StatsPage>
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
           child: Column(
             children: [
-              SegmentedButton<StatView>(
-                segments: const [
-                  ButtonSegment(value: StatView.plans, label: Text('计划')),
-                  ButtonSegment(value: StatView.tasks, label: Text('任务')),
-                  ButtonSegment(value: StatView.quadrant, label: Text('四象限')),
-                  ButtonSegment(value: StatView.tags, label: Text('标签')),
-                ],
-                selected: {view},
-                showSelectedIcon: false,
-                onSelectionChanged: (selected) => _selectView(selected.first),
-              ),
+              _StatViewSelector(selected: view, onSelected: _selectView),
               const SizedBox(height: 14),
               Row(
                 children: [
@@ -383,7 +429,18 @@ class _StatsPageState extends State<StatsPage>
                                     statusName,
                               );
                               return _Distribution(
-                                label: statusName,
+                                label: matching.progress?.currentNode == null
+                                    ? widget.controller.displayStatusName(
+                                        widget.controller.statusOf(
+                                          matching.statusId,
+                                        ),
+                                        Localizations.localeOf(context),
+                                      )
+                                    : widget.controller
+                                          .displayProgressNodeName(
+                                            matching.progress!.currentNode!,
+                                            Localizations.localeOf(context),
+                                          ),
                                 count: count,
                                 total: unfinished.length,
                                 color:
@@ -440,7 +497,12 @@ class _StatsPageState extends State<StatsPage>
     final progressGroups = <String, _PlanProgressStat>{};
     for (final plan in plans) {
       final node = plan.progress.currentNode;
-      final label = node?.name ?? '未设置进度';
+      final label = node == null
+          ? '未设置进度'
+          : widget.controller.displayProgressNodeName(
+              node,
+              Localizations.localeOf(context),
+            );
       final current = progressGroups[label];
       progressGroups[label] = _PlanProgressStat(
         label: label,
@@ -474,7 +536,13 @@ class _StatsPageState extends State<StatsPage>
 
     final categoryGroups = <String, List<PlanItem>>{};
     for (final plan in plans) {
-      final name = plan.categoryName.isEmpty ? '未分类' : plan.categoryName;
+      final name = plan.categoryName.isEmpty
+          ? '未分类'
+          : widget.controller.displayCategoryName(
+              plan.sourceCategoryId,
+              plan.categoryName,
+              Localizations.localeOf(context),
+            );
       categoryGroups.putIfAbsent(name, () => []).add(plan);
     }
     final categoryStats =
@@ -582,7 +650,16 @@ class _StatsPageState extends State<StatsPage>
                   ? doneCompare
                   : a.title.compareTo(b.title);
             });
-      return _QuadrantGroup(definition: definition, entries: matchingEntries);
+      return _QuadrantGroup(
+        definition: definition.copyWith(
+          name: tagDefinitionName(
+            definition,
+            Localizations.localeOf(context),
+          ),
+          nameSource: NameSource.user,
+        ),
+        entries: matchingEntries,
+      );
     }).toList();
     final classifiedEntries = groups.expand((group) => group.entries).toSet();
     final completed = classifiedEntries
@@ -647,7 +724,10 @@ class _StatsPageState extends State<StatsPage>
           .where((entry) => _entryHasTagDefinition(entry, definition))
           .toList();
       return _OtherTagStat(
-        name: definition.name,
+        name: tagDefinitionName(
+          definition,
+          Localizations.localeOf(context),
+        ),
         color: definition.color,
         icon: definition.icon,
         entries: matchingEntries,
@@ -881,7 +961,7 @@ class _QuadrantCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 5),
                   Expanded(
-                    child: Text(
+                    child: RawText(
                       group.definition.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -944,7 +1024,7 @@ class _QuadrantCard extends StatelessWidget {
                         final completedColor = Theme.of(context)
                             .colorScheme
                             .onSurfaceVariant;
-                        final title = Text(
+                        final title = RawText(
                           entry.title,
                           textAlign: TextAlign.start,
                           maxLines: 1,
@@ -1056,7 +1136,7 @@ class _OtherTagStatRow extends StatelessWidget {
               Icon(stat.icon ?? Icons.label_outline, size: 16, color: color),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
+                child: RawText(
                   stat.name,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12),
@@ -1287,7 +1367,10 @@ class _CategoryDistribution extends StatelessWidget {
             children: [
               SizedBox(
                 width: 90,
-                child: Text(stat.label, overflow: TextOverflow.ellipsis),
+                child: RawText(
+                  stat.label,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               Expanded(
                 child: Semantics(
@@ -1424,6 +1507,44 @@ class StatsFilterDrawer extends StatelessWidget {
     StatScope.tasks: '任务',
     StatScope.both: '计划 + 任务',
   };
+
+  String _categoryLabel(BuildContext context, String name) {
+    final definition = controller.categoryDefinitionForName(name);
+    return definition == null
+        ? name
+        : categoryDefinitionName(definition, Localizations.localeOf(context));
+  }
+
+  String _templateLabel(BuildContext context, String name) {
+    for (final template in controller.progressTemplates) {
+      if (template.name == name) {
+        return progressTemplateName(
+          template,
+          Localizations.localeOf(context),
+        );
+      }
+    }
+    return name;
+  }
+
+  String _nodeLabel(BuildContext context, String name) {
+    for (final template in controller.progressTemplates) {
+      if (template.name != criteria.progressTemplateName) continue;
+      for (final node in template.nodes) {
+        if (node.name == name) {
+          return progressNodeName(node, Localizations.localeOf(context));
+        }
+      }
+    }
+    return name;
+  }
+
+  String _tagLabel(BuildContext context, String name) {
+    final definition = controller.tagDefinitionForName(name);
+    return definition == null
+        ? name
+        : tagDefinitionName(definition, Localizations.localeOf(context));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1570,8 +1691,10 @@ class StatsFilterDrawer extends StatelessWidget {
                     items: [
                       const DropdownMenuItem(value: '', child: Text('全部分类')),
                       ...categories.map(
-                        (name) =>
-                            DropdownMenuItem(value: name, child: Text(name)),
+                        (name) => DropdownMenuItem(
+                          value: name,
+                          child: RawText(_categoryLabel(context, name)),
+                        ),
                       ),
                     ],
                     onChanged: (value) =>
@@ -1589,8 +1712,10 @@ class StatsFilterDrawer extends StatelessWidget {
                     items: [
                       const DropdownMenuItem(value: '', child: Text('全部进度方案')),
                       ...templates.map(
-                        (name) =>
-                            DropdownMenuItem(value: name, child: Text(name)),
+                        (name) => DropdownMenuItem(
+                          value: name,
+                          child: RawText(_templateLabel(context, name)),
+                        ),
                       ),
                     ],
                     onChanged: (value) => onChanged(
@@ -1618,7 +1743,10 @@ class StatsFilterDrawer extends StatelessWidget {
                         ),
                         ...nodes.map(
                           (name) =>
-                              DropdownMenuItem(value: name, child: Text(name)),
+                              DropdownMenuItem(
+                                value: name,
+                                child: RawText(_nodeLabel(context, name)),
+                              ),
                         ),
                       ],
                       onChanged: (value) => onChanged(
@@ -1635,7 +1763,7 @@ class StatsFilterDrawer extends StatelessWidget {
                     children: tags.map((tag) {
                       final selected = criteria.tags.contains(tag);
                       return StableFilterChip(
-                        label: tag,
+                        label: _tagLabel(context, tag),
                         selected: selected,
                         onSelected: (value) {
                           final next = {...criteria.tags};
@@ -1732,7 +1860,7 @@ class _Distribution extends StatelessWidget {
       children: [
         SizedBox(
           width: 90,
-          child: Text(label, overflow: TextOverflow.ellipsis),
+          child: RawText(label, overflow: TextOverflow.ellipsis),
         ),
         Expanded(
           child: Semantics(

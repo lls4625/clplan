@@ -101,7 +101,7 @@ class ContactSelectionField extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(
+                          child: RawText(
                             contact.name,
                             style: Theme.of(context).textTheme.titleSmall
                                 ?.copyWith(fontWeight: FontWeight.w700),
@@ -173,11 +173,17 @@ class _ContactContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      value.trim().isEmpty ? '未填写' : value,
-      softWrap: softWrap,
-      style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.4),
-    );
+    return value.trim().isEmpty
+        ? Text(
+            '未填写',
+            softWrap: softWrap,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.4),
+          )
+        : RawText(
+            value,
+            softWrap: softWrap,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.4),
+          );
   }
 }
 
@@ -242,8 +248,8 @@ Future<ContactEntry?> showContactPicker(
                       ].where((value) => value.isNotEmpty).join(' · ');
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: Text(contact.name),
-                        subtitle: detail.isEmpty ? null : Text(detail),
+                        title: RawText(contact.name),
+                        subtitle: detail.isEmpty ? null : RawText(detail),
                         trailing: IconButton(
                           tooltip: localizeUiText(context, '编辑联系人'),
                           onPressed: () async {

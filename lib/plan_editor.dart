@@ -4,6 +4,7 @@ import 'app_controller.dart';
 import 'contact_widgets.dart';
 import 'models.dart';
 import 'l10n/ui_text.dart';
+import 'l10n/preset_text.dart';
 import 'planning/planning_models.dart';
 import 'planning/widgets/planning_composer.dart';
 import 'reminder_form_widgets.dart';
@@ -76,6 +77,7 @@ class _PlanEditorState extends State<PlanEditor> {
   late List<TaskReminderRule> reminders;
   late bool reminderEnabled;
   late String categoryName;
+  String? sourceCategoryId;
   late ProgressSnapshot progress;
   late final List<PlanMilestone> milestones;
   late final List<RecurrenceRule> recurrenceRules;
@@ -103,6 +105,10 @@ class _PlanEditorState extends State<PlanEditor> {
     reminders = plan?.reminders.toList() ?? _remindersFromDraft(draft);
     reminderEnabled = plan?.reminderEnabled ?? reminders.isNotEmpty;
     categoryName = plan?.categoryName ?? '';
+    sourceCategoryId = plan?.sourceCategoryId;
+    if (widget.controller.categoryDefinitionForId(sourceCategoryId) == null) {
+      sourceCategoryId = null;
+    }
     progress =
         plan?.progress ??
         widget.controller.progressSnapshot('plan-progress-$id');
@@ -278,8 +284,8 @@ class _PlanEditorState extends State<PlanEditor> {
                                   );
                                 }),
                               ),
-                              title: Text(item.name),
-                              subtitle: Text(
+                              title: RawText(item.name),
+                              subtitle: RawText(
                                 [item.date, item.description]
                                     .where((value) => value.isNotEmpty)
                                     .join(' · '),
@@ -313,7 +319,7 @@ class _PlanEditorState extends State<PlanEditor> {
                             (rule) => SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               value: rule.enabled,
-                              title: Text(rule.title),
+                              title: RawText(rule.title),
                               subtitle: Text(_recurrenceSummary(context, rule)),
                               onChanged: (value) => setState(() {
                                 final index = recurrenceRules.indexOf(rule);
@@ -372,28 +378,53 @@ class _PlanEditorState extends State<PlanEditor> {
                         DropdownMenu<String>(
                           expandedInsets: EdgeInsets.zero,
                           label: const Text('分类'),
-                          initialSelection: categoryName.isEmpty
-                              ? null
-                              : categoryName,
+                          initialSelection:
+                              sourceCategoryId ??
+                              (categoryName.isEmpty
+                                  ? null
+                                  : 'history:$categoryName'),
                           dropdownMenuEntries: [
                             ...widget.controller.categoryDefinitions.map(
                               (item) => DropdownMenuEntry(
-                                value: item.name,
-                                label: item.name,
+                                value: item.id,
+                                label: categoryDefinitionName(
+                                  item,
+                                  Localizations.localeOf(context),
+                                ),
                                 leadingIcon: Icon(item.icon, color: item.color),
                               ),
                             ),
                             if (categoryName.isNotEmpty &&
+                                sourceCategoryId == null &&
                                 !widget.controller.categoryDefinitions.any(
                                   (item) => item.name == categoryName,
                                 ))
                               DropdownMenuEntry(
-                                value: categoryName,
+                                value: 'history:$categoryName',
                                 label: '$categoryName（历史分类）',
                               ),
                           ],
-                          onSelected: (value) =>
-                              setState(() => categoryName = value ?? ''),
+                          onSelected: (value) => setState(() {
+                            if (value == null) {
+                              sourceCategoryId = null;
+                              categoryName = '';
+                              return;
+                            }
+                            if (value.startsWith('history:')) {
+                              sourceCategoryId = null;
+                              categoryName = value.substring(8);
+                              return;
+                            }
+                            final definition = widget.controller
+                                .categoryDefinitionForId(value);
+                            sourceCategoryId = definition?.id;
+                            categoryName = definition == null
+                                ? ''
+                                : categoryDefinitionName(
+                                    definition,
+                                    Localizations.localeOf(context),
+                                  );
+                          }),
                         ),
                         DropdownMenu<String>(
                           expandedInsets: EdgeInsets.zero,
@@ -403,7 +434,10 @@ class _PlanEditorState extends State<PlanEditor> {
                             ...widget.controller.progressTemplates.map(
                               (item) => DropdownMenuEntry(
                                 value: item.id,
-                                label: item.name,
+                                label: progressTemplateName(
+                                  item,
+                                  Localizations.localeOf(context),
+                                ),
                               ),
                             ),
                             if (progress.sourceTemplateId != null &&
@@ -437,7 +471,10 @@ class _PlanEditorState extends State<PlanEditor> {
                               .map(
                                 (item) => DropdownMenuEntry(
                                   value: item.id,
-                                  label: item.name,
+                                  label: progressNodeName(
+                                    item,
+                                    Localizations.localeOf(context),
+                                  ),
                                 ),
                               )
                               .toList(),
@@ -1101,7 +1138,14 @@ class _PlanEditorState extends State<PlanEditor> {
             size: 18,
             color: definition?.color,
           ),
-          label: Text(name),
+          label: RawText(
+            definition == null
+                ? name
+                : tagDefinitionName(
+                    definition,
+                    Localizations.localeOf(context),
+                  ),
+          ),
           onDeleted: () => setState(() => selectedTags.remove(name)),
         );
       }).toList(),
@@ -1166,7 +1210,12 @@ class _PlanEditorState extends State<PlanEditor> {
                   (tag) => CheckboxListTile(
                     value: selectedTags.contains(tag.name),
                     secondary: Icon(tag.icon, color: tag.color),
-                    title: Text(tag.name),
+                    title: RawText(
+                      tagDefinitionName(
+                        tag,
+                        Localizations.localeOf(context),
+                      ),
+                    ),
                     subtitle: tag.isQuadrant ? const Text('四象限 · 单选') : null,
                     onChanged: (value) => setState(() {
                       if (value != true) {
@@ -1194,7 +1243,7 @@ class _PlanEditorState extends State<PlanEditor> {
                       (name) => CheckboxListTile(
                         value: true,
                         secondary: const Icon(Icons.history),
-                        title: Text(name),
+                        title: RawText(name),
                         onChanged: (_) =>
                             setState(() => selectedTags.remove(name)),
                       ),
@@ -1213,9 +1262,12 @@ class _PlanEditorState extends State<PlanEditor> {
     try {
       final old = widget.plan;
       final now = DateTime.now();
-      final category = widget.controller.categoryDefinitionForName(
-        categoryName,
+      final category = widget.controller.categoryDefinitionForId(
+        sourceCategoryId,
       );
+      final savedCategoryName = category == null
+          ? categoryName
+          : category.name;
       final tags = selectedTags.map((tagName) {
         final definition = widget.controller.tagDefinitionForName(tagName);
         for (final snapshot in old?.tags ?? const <TaskTagSnapshot>[]) {
@@ -1234,7 +1286,8 @@ class _PlanEditorState extends State<PlanEditor> {
         description: description.text,
         startDate: startDate,
         targetDate: targetDate,
-        categoryName: categoryName,
+        categoryName: savedCategoryName,
+        sourceCategoryId: category?.id,
         categoryColorValue: category?.colorValue ?? 0xff8e8e93,
         categoryIconName: category?.iconName ?? 'project',
         tags: tags,
@@ -1264,7 +1317,13 @@ class _PlanEditorState extends State<PlanEditor> {
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('删除计划？'),
-            content: Text('确定删除“${plan.name}”吗？存在任务的计划需要先清空任务。'),
+            content: RawText(
+              localizeUiTextWithArguments(
+                context,
+                '确定删除“{0}”吗？存在任务的计划需要先清空任务。',
+                [plan.name],
+              ),
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),

@@ -6,26 +6,36 @@ import 'app_database.dart';
 import 'home_shell.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'l10n/ui_text.dart';
+import 'security/app_security_service.dart';
 import 'welcome_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await LiquidGlassWidgets.initialize(enablePerformanceMonitor: false);
   final controller = AppController(AppDatabase.instance);
+  final securityService = AppSecurityService();
   await controller.initialize();
   runApp(
     LiquidGlassWidgets.wrap(
       adaptiveQuality: true,
       brightnessResolver: Theme.maybeBrightnessOf,
       theme: const GlassThemeData.ios27(),
-      child: ClPlanApp(controller: controller),
+      child: ClPlanApp(
+        controller: controller,
+        securityService: securityService,
+      ),
     ),
   );
 }
 
 class ClPlanApp extends StatelessWidget {
-  const ClPlanApp({super.key, required this.controller});
+  const ClPlanApp({
+    super.key,
+    required this.controller,
+    required this.securityService,
+  });
   final AppController controller;
+  final AppSecurityService securityService;
 
   Locale _resolveSystemLocale(List<Locale>? locales) {
     for (final locale in locales ?? const <Locale>[]) {
@@ -160,7 +170,15 @@ class ClPlanApp extends StatelessWidget {
                   ),
                 ),
               )
-            : WelcomePage(child: HomeShell(controller: controller)),
+            : WelcomePage(
+                securityService: securityService,
+                requireAuthentication:
+                    controller.preferences.requireAuthenticationOnLaunch,
+                child: HomeShell(
+                  controller: controller,
+                  securityService: securityService,
+                ),
+              ),
       );
     },
   );

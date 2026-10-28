@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app_database.dart';
 import 'alarm_service.dart';
+import 'l10n/preset_text.dart';
 import 'models.dart';
 import 'notification_service.dart';
 import 'planning/basic_planning_engine.dart';
@@ -93,12 +94,92 @@ class AppController extends ChangeNotifier {
     return null;
   }
 
+  CategoryDefinition? categoryDefinitionForId(String? id) {
+    if (id == null) return null;
+    for (final category in categoryDefinitions) {
+      if (category.id == id) return category;
+    }
+    return null;
+  }
+
   TaskTagDefinition? tagDefinitionForName(String name) {
     for (final tag in tagDefinitions) {
       if (tag.name == name) return tag;
     }
     return null;
   }
+
+  TaskTagDefinition? tagDefinitionForId(String? id) {
+    if (id == null) return null;
+    for (final tag in tagDefinitions) {
+      if (tag.id == id) return tag;
+    }
+    return null;
+  }
+
+  TaskTagDefinition? tagDefinitionForDisplayName(
+    String name,
+    Locale locale,
+  ) {
+    for (final tag in tagDefinitions) {
+      if (tagDefinitionName(tag, locale) == name || tag.name == name) {
+        return tag;
+      }
+    }
+    return null;
+  }
+
+  String displayCategoryName(
+    String? sourceId,
+    String snapshot,
+    Locale locale,
+  ) {
+    final definition = categoryDefinitionForId(sourceId);
+    return definition == null
+        ? snapshot
+        : categoryDefinitionName(definition, locale);
+  }
+
+  String displayTagName(TaskTagSnapshot snapshot, Locale locale) {
+    final definition = tagDefinitionForId(snapshot.sourceTagId);
+    return definition == null
+        ? snapshot.name
+        : tagDefinitionName(definition, locale);
+  }
+
+  String displayProgressTemplateName(
+    ProgressSnapshot snapshot,
+    Locale locale,
+  ) {
+    for (final template in progressTemplates) {
+      if (template.id == snapshot.sourceTemplateId) {
+        return progressTemplateName(template, locale);
+      }
+    }
+    return presetNameForLocale(
+      locale: locale,
+      id: snapshot.sourceTemplateId ?? '',
+      fallback: snapshot.templateName,
+      nameSource: snapshot.templateNameSource,
+    );
+  }
+
+  String displayProgressNodeName(ProgressNode node, Locale locale) {
+    final sourceId = node.sourceNodeId;
+    if (sourceId != null) {
+      for (final template in progressTemplates) {
+        for (final definitionNode in template.nodes) {
+          if (definitionNode.id == sourceId) {
+            return progressNodeName(definitionNode, locale);
+          }
+        }
+      }
+    }
+    return progressNodeName(node, locale);
+  }
+
+  String displayStatusName(TaskStatus status, Locale locale) =>
+      taskStatusName(status, locale);
 
   TaskItem _withSnapshots(TaskItem task) {
     var next = task;
@@ -278,10 +359,39 @@ class AppController extends ChangeNotifier {
         defaultReminderMinutes: int.tryParse(value) ?? -1,
       ),
       'reminder_sound' => preferences.copyWith(reminderSound: value == 'true'),
+      'require_authentication_on_launch' => preferences.copyWith(
+        requireAuthenticationOnLaunch: value == 'true',
+      ),
+      'require_authentication_for_export' => preferences.copyWith(
+        requireAuthenticationForExport: value == 'true',
+      ),
       _ => preferences,
     };
     notifyListeners();
     if (key == 'reminder_sound') await _reconcileReminders();
+  }
+
+  Future<void> setSecurityPreferences({
+    bool? requireAuthenticationOnLaunch,
+    bool? requireAuthenticationForExport,
+  }) async {
+    if (requireAuthenticationOnLaunch != null) {
+      await db.savePreference(
+        'require_authentication_on_launch',
+        '$requireAuthenticationOnLaunch',
+      );
+    }
+    if (requireAuthenticationForExport != null) {
+      await db.savePreference(
+        'require_authentication_for_export',
+        '$requireAuthenticationForExport',
+      );
+    }
+    preferences = preferences.copyWith(
+      requireAuthenticationOnLaunch: requireAuthenticationOnLaunch,
+      requireAuthenticationForExport: requireAuthenticationForExport,
+    );
+    notifyListeners();
   }
 
   Future<void> setFontScalePreferences({
@@ -377,7 +487,7 @@ class AppController extends ChangeNotifier {
     await reload();
   }
 
-  Future<void> saveTagDefinition(TaskTagDefinition tag) async {
+  Future<void> saveTagDefinition(TaskTagDefinition tag, Locale locale) async {
     final name = tag.name.trim();
     if (name.isEmpty) throw StateError('标签名称不能为空。');
     TaskTagDefinition? existing;
@@ -399,10 +509,26 @@ class AppController extends ChangeNotifier {
     }
     final duplicate = tagDefinitions.any(
       (item) =>
-          item.id != tag.id && item.name.toLowerCase() == name.toLowerCase(),
+          item.id != tag.id &&
+          tagDefinitionName(item, locale).toLowerCase() == name.toLowerCase(),
     );
     if (duplicate) throw StateError('标签名称不能重复。');
-    await db.saveTagDefinition(tag.copyWith(name: name));
+    final keepsSystemName =
+        existing != null &&
+        existing.nameSource == NameSource.system &&
+        name == tagDefinitionName(existing, locale);
+    await db.saveTagDefinition(
+      tag.copyWith(
+        name: keepsSystemName ? existing!.name : name,
+        nameSource: keepsSystemName
+            ? NameSource.system
+            : existing == null
+            ? NameSource.user
+            : name == existing.name
+            ? existing.nameSource
+            : NameSource.user,
+      ),
+    );
     await reload();
   }
 
@@ -434,7 +560,10 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<void> saveCategoryDefinition(CategoryDefinition category) async {
+  Future<void> saveCategoryDefinition(
+    CategoryDefinition category,
+    Locale locale,
+  ) async {
     final name = category.name.trim();
     if (name.isEmpty) throw StateError('分类名称不能为空。');
     CategoryDefinition? existing;
@@ -452,10 +581,26 @@ class AppController extends ChangeNotifier {
     final duplicate = categoryDefinitions.any(
       (item) =>
           item.id != category.id &&
-          item.name.toLowerCase() == name.toLowerCase(),
+          categoryDefinitionName(item, locale).toLowerCase() ==
+              name.toLowerCase(),
     );
     if (duplicate) throw StateError('分类名称不能重复。');
-    await db.saveCategoryDefinition(category.copyWith(name: name));
+    final keepsSystemName =
+        existing != null &&
+        existing.nameSource == NameSource.system &&
+        name == categoryDefinitionName(existing, locale);
+    await db.saveCategoryDefinition(
+      category.copyWith(
+        name: keepsSystemName ? existing!.name : name,
+        nameSource: keepsSystemName
+            ? NameSource.system
+            : existing == null
+            ? NameSource.user
+            : name == existing.name
+            ? existing.nameSource
+            : NameSource.user,
+      ),
+    );
     await reload();
   }
 
@@ -492,7 +637,10 @@ class AppController extends ChangeNotifier {
     await reload();
   }
 
-  Future<void> saveProgressTemplate(ProgressTemplate template) async {
+  Future<void> saveProgressTemplate(
+    ProgressTemplate template,
+    Locale locale,
+  ) async {
     final name = template.name.trim();
     if (name.isEmpty) throw StateError('进度方案名称不能为空。');
     ProgressTemplate? existing;
@@ -534,10 +682,48 @@ class AppController extends ChangeNotifier {
     final duplicate = progressTemplates.any(
       (item) =>
           item.id != template.id &&
-          item.name.toLowerCase() == name.toLowerCase(),
+          progressTemplateName(item, locale).toLowerCase() ==
+              name.toLowerCase(),
     );
     if (duplicate) throw StateError('进度方案名称不能重复。');
-    await db.saveProgressTemplate(template.copyWith(name: name));
+    final keepsSystemName =
+        existing != null &&
+        existing.nameSource == NameSource.system &&
+        name == progressTemplateName(existing, locale);
+    final savedNodes = template.nodes.map((node) {
+      ProgressNode? previous;
+      for (final item in existing?.nodes ?? const <ProgressNode>[]) {
+        if (item.id == node.id) previous = item;
+      }
+      final keepsSystemNodeName =
+          previous != null &&
+          previous.nameSource == NameSource.system &&
+          node.name == progressNodeName(previous, locale);
+      return node.copyWith(
+        name: keepsSystemNodeName ? previous!.name : node.name,
+        sourceNodeId: previous?.sourceNodeId ?? node.sourceNodeId ?? node.id,
+        nameSource: keepsSystemNodeName
+            ? NameSource.system
+            : previous == null
+            ? NameSource.user
+            : node.name == previous.name
+            ? previous.nameSource
+            : NameSource.user,
+      );
+    }).toList();
+    await db.saveProgressTemplate(
+      template.copyWith(
+        name: keepsSystemName ? existing!.name : name,
+        nameSource: keepsSystemName
+            ? NameSource.system
+            : existing == null
+            ? NameSource.user
+            : name == existing.name
+            ? existing.nameSource
+            : NameSource.user,
+        nodes: savedNodes,
+      ),
+    );
     await reload();
   }
 
@@ -673,6 +859,8 @@ class AppController extends ChangeNotifier {
           (node) => ProgressNode(
             id: '$instanceId-${node.id}',
             name: node.name,
+            sourceNodeId: node.sourceNodeId ?? node.id,
+            nameSource: node.nameSource,
             colorValue: node.colorValue,
             kind: node.kind,
             sortOrder: node.sortOrder,
@@ -687,6 +875,7 @@ class AppController extends ChangeNotifier {
       instanceId: instanceId,
       sourceTemplateId: template.id,
       templateName: template.name,
+      templateNameSource: template.nameSource,
       currentNodeId: start.id,
       nodes: nodes,
     );
@@ -702,6 +891,8 @@ class AppController extends ChangeNotifier {
           (node) => ProgressNode(
             id: '$instanceId-${node.id}',
             name: node.name,
+            sourceNodeId: node.sourceNodeId ?? node.id,
+            nameSource: node.nameSource,
             colorValue: node.colorValue,
             kind: node.kind,
             sortOrder: node.sortOrder,
@@ -716,6 +907,7 @@ class AppController extends ChangeNotifier {
       instanceId: instanceId,
       sourceTemplateId: template.id,
       templateName: template.name,
+      templateNameSource: template.nameSource,
       currentNodeId: start.id,
       nodes: nodes,
     );

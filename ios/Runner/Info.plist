@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>ClPlan 需要为你选择的重要计划和任务设置闹铃提醒。</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>用于在进入 ClPlan 或导出计划和联系人数据前验证设备所有者。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'app_controller.dart';
 import 'contact_widgets.dart';
 import 'models.dart';
+import 'l10n/preset_text.dart';
 import 'l10n/ui_text.dart';
 import 'planning/planning_models.dart';
 import 'planning/widgets/planning_composer.dart';
@@ -82,6 +83,7 @@ class _TaskEditorState extends State<TaskEditor> {
   late final TextEditingController title;
   late final TextEditingController description;
   late final TextEditingController type;
+  String? sourceCategoryId;
   late final TextEditingController reason;
   late final TextEditingController followup;
   late final List<ContactEntry> selectedContacts;
@@ -101,6 +103,15 @@ class _TaskEditorState extends State<TaskEditor> {
       widget.task != null &&
       widget.controller.childrenOf(widget.task!.id).isNotEmpty;
 
+  String _categoryDisplayName(BuildContext context) {
+    final definition = widget.controller.categoryDefinitionForId(
+      sourceCategoryId,
+    );
+    return definition == null
+        ? type.text
+        : categoryDefinitionName(definition, Localizations.localeOf(context));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -111,6 +122,10 @@ class _TaskEditorState extends State<TaskEditor> {
       text: task?.description ?? draft?.description ?? '',
     );
     type = TextEditingController(text: task?.type ?? '');
+    sourceCategoryId = task?.sourceCategoryId;
+    if (widget.controller.categoryDefinitionForId(sourceCategoryId) == null) {
+      sourceCategoryId = null;
+    }
     selectedContacts = [...?task?.contacts];
     if (selectedContacts.isEmpty && (task?.contact ?? '').trim().isNotEmpty) {
       selectedContacts.add(
@@ -276,11 +291,17 @@ class _TaskEditorState extends State<TaskEditor> {
                 iconName: definition?.iconName ?? 'label',
               );
             }).toList();
+      final selectedCategory = widget.controller.categoryDefinitionForId(
+        sourceCategoryId,
+      );
+      final savedCategoryName = selectedCategory == null
+          ? type.text.trim()
+          : selectedCategory.name;
       final item = TaskItem(
         id: old?.id ?? 'task-${now.microsecondsSinceEpoch}',
         title: readOnly ? old!.title : title.text.trim(),
         description: readOnly ? old!.description : description.text,
-        type: readOnly ? old!.type : type.text.trim(),
+        type: readOnly ? old!.type : savedCategoryName,
         contact: readOnly
             ? old!.contact
             : selectedContacts
@@ -301,9 +322,15 @@ class _TaskEditorState extends State<TaskEditor> {
         originId: old?.originId ?? widget.originId,
         parentTaskId: readOnly ? old!.parentTaskId : selectedParentId,
         updatedAt: now,
-        sourceCategoryId: readOnly ? old!.sourceCategoryId : null,
-        categoryColorValue: readOnly ? old!.categoryColorValue : 0xff8e8e93,
-        categoryIconName: readOnly ? old!.categoryIconName : 'project',
+        sourceCategoryId: readOnly
+            ? old!.sourceCategoryId
+            : selectedCategory?.id,
+        categoryColorValue: readOnly
+            ? old!.categoryColorValue
+            : selectedCategory?.colorValue ?? 0xff8e8e93,
+        categoryIconName: readOnly
+            ? old!.categoryIconName
+            : selectedCategory?.iconName ?? 'project',
         tagSnapshots: tagSnapshots,
         progress: progress,
         planId: old?.planId ?? widget.initialPlanId,
@@ -577,19 +604,27 @@ class _TaskEditorState extends State<TaskEditor> {
                       icon: Icons.account_tree_outlined,
                       children: [
                         if (readOnly)
-                          WorkValueField(label: '分类', value: type.text)
+                          WorkValueField(
+                            label: '分类',
+                            value: _categoryDisplayName(context),
+                          )
                         else
                           DropdownMenu<String>(
                             expandedInsets: EdgeInsets.zero,
                             label: const Text('分类'),
-                            initialSelection: type.text.isEmpty
-                                ? null
-                                : type.text,
+                            initialSelection:
+                                sourceCategoryId ??
+                                (type.text.isEmpty
+                                    ? null
+                                    : 'history:${type.text}'),
                             dropdownMenuEntries: [
                               ...widget.controller.categoryDefinitions.map(
                                 (item) => DropdownMenuEntry(
-                                  value: item.name,
-                                  label: item.name,
+                                  value: item.id,
+                                  label: categoryDefinitionName(
+                                    item,
+                                    Localizations.localeOf(context),
+                                  ),
                                   leadingIcon: Icon(
                                     item.icon,
                                     color: item.color,
@@ -597,21 +632,43 @@ class _TaskEditorState extends State<TaskEditor> {
                                 ),
                               ),
                               if (type.text.isNotEmpty &&
+                                  sourceCategoryId == null &&
                                   !widget.controller.categoryDefinitions.any(
                                     (item) => item.name == type.text,
                                   ))
                                 DropdownMenuEntry(
-                                  value: type.text,
+                                  value: 'history:${type.text}',
                                   label: '${type.text}（历史分类）',
                                 ),
                             ],
-                            onSelected: (value) =>
-                                setState(() => type.text = value ?? ''),
+                            onSelected: (value) => setState(() {
+                              if (value == null) {
+                                sourceCategoryId = null;
+                                type.text = '';
+                              } else if (value.startsWith('history:')) {
+                                sourceCategoryId = null;
+                                type.text = value.substring(8);
+                              } else {
+                                final definition = widget.controller
+                                    .categoryDefinitionForId(value);
+                                sourceCategoryId = definition?.id;
+                                type.text = definition == null
+                                    ? ''
+                                    : categoryDefinitionName(
+                                        definition,
+                                        Localizations.localeOf(context),
+                                      );
+                              }
+                            }),
                           ),
                         if (readOnly)
                           WorkValueField(
                             label: '进度方案',
-                            value: progress.templateName,
+                            value: widget.controller
+                                .displayProgressTemplateName(
+                                  progress,
+                                  Localizations.localeOf(context),
+                                ),
                           )
                         else
                           DropdownMenu<String>(
@@ -622,7 +679,10 @@ class _TaskEditorState extends State<TaskEditor> {
                               ...widget.controller.progressTemplates.map(
                                 (item) => DropdownMenuEntry(
                                   value: item.id,
-                                  label: item.name,
+                                  label: progressTemplateName(
+                                    item,
+                                    Localizations.localeOf(context),
+                                  ),
                                 ),
                               ),
                               if (progress.sourceTemplateId != null &&
@@ -660,7 +720,10 @@ class _TaskEditorState extends State<TaskEditor> {
                               .map(
                                 (item) => DropdownMenuEntry(
                                   value: item.id,
-                                  label: item.name,
+                                  label: progressNodeName(
+                                    item,
+                                    Localizations.localeOf(context),
+                                  ),
                                 ),
                               )
                               .toList(),
@@ -888,7 +951,14 @@ class _TaskEditorState extends State<TaskEditor> {
             size: 18,
             color: definition?.color,
           ),
-          label: Text(name),
+          label: RawText(
+            definition == null
+                ? name
+                : tagDefinitionName(
+                    definition,
+                    Localizations.localeOf(context),
+                  ),
+          ),
           onDeleted: readOnly
               ? null
               : () => setState(() => selectedTags.remove(name)),
@@ -959,7 +1029,12 @@ class _TaskEditorState extends State<TaskEditor> {
                   (tag) => CheckboxListTile(
                     value: selectedTags.contains(tag.name),
                     secondary: Icon(tag.icon, color: tag.color),
-                    title: Text(tag.name),
+                    title: RawText(
+                      tagDefinitionName(
+                        tag,
+                        Localizations.localeOf(context),
+                      ),
+                    ),
                     subtitle: tag.isQuadrant ? const Text('四象限 · 单选') : null,
                     onChanged: readOnly
                         ? null
@@ -991,7 +1066,7 @@ class _TaskEditorState extends State<TaskEditor> {
                       (name) => CheckboxListTile(
                         value: true,
                         secondary: const Icon(Icons.history),
-                        title: Text(name),
+                        title: RawText(name),
                         onChanged: readOnly
                             ? null
                             : (_) => setState(() => selectedTags.remove(name)),

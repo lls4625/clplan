@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'l10n/ui_text.dart' show localizeUiText;
+import 'l10n/ui_text.dart' show RawText, localizeUiText;
 
 class CardTagItem {
   const CardTagItem({required this.name, required this.icon, this.color});
@@ -129,7 +129,7 @@ class CardTagSummary extends StatelessWidget {
         width: 16,
         height: 16,
       ),
-      label: Text(
+      label: RawText(
         item.name,
         maxLines: maxWidth == null ? 1 : 2,
         overflow: TextOverflow.ellipsis,

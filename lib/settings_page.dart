@@ -4,21 +4,28 @@ import 'app_controller.dart';
 import 'contact_widgets.dart';
 import 'developer_tip.dart';
 import 'l10n/l10n.dart';
+import 'l10n/preset_text.dart';
 import 'l10n/ui_text.dart';
 import 'models.dart';
 import 'notification_service.dart';
+import 'security/app_security_service.dart';
 import 'ui/app_alert.dart';
 import 'ui/glass_bottom_navigation.dart';
 import 'xlsx_service.dart';
+
+String _columnLabel(BuildContext context, String key) =>
+    XlsxService.localizedHeader(Localizations.localeOf(context), key);
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
     super.key,
     required this.controller,
     required this.developerTipController,
+    required this.securityService,
   });
   final AppController controller;
   final DeveloperTipController developerTipController;
+  final AppSecurityService securityService;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -50,6 +57,19 @@ class SettingsPage extends StatelessWidget {
               'ja': '日本語',
               'ko': '한국어',
               'en': 'English',
+            },
+            valueLocales: const {
+              'zh': Locale.fromSubtags(
+                languageCode: 'zh',
+                scriptCode: 'Hans',
+              ),
+              'tw': Locale.fromSubtags(
+                languageCode: 'zh',
+                scriptCode: 'Hant',
+              ),
+              'ja': Locale('ja'),
+              'ko': Locale('ko'),
+              'en': Locale('en'),
             },
             onChanged: (value) => controller.setPreference('language', value),
           ),
@@ -142,6 +162,21 @@ class SettingsPage extends StatelessWidget {
             title: '表格与数据',
             subtitle: '查看、导入、导出与列设置',
             onTap: () => _openDetail(context, '表格与数据', _tableDetail),
+          ),
+          _SettingsMenuItem(
+            icon: Icons.lock_outline,
+            title: '安全锁',
+            subtitle:
+                '${localizeUiText(context, controller.preferences.requireAuthenticationOnLaunch ? '启动验证开启' : '启动验证关闭')} · '
+                '${localizeUiText(context, controller.preferences.requireAuthenticationForExport ? '导出验证开启' : '导出验证关闭')}',
+            onTap: () => Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(
+                builder: (_) => _SecurityLockPage(
+                  controller: controller,
+                  securityService: securityService,
+                ),
+              ),
+            ),
           ),
           _SettingsMenuItem(
             icon: Icons.shield_outlined,
@@ -383,7 +418,12 @@ class SettingsPage extends StatelessWidget {
               .map(
                 (category) => Chip(
                   avatar: Icon(category.icon, color: category.color, size: 18),
-                  label: Text(category.name),
+                  label: RawText(
+                    categoryDefinitionName(
+                      category,
+                      Localizations.localeOf(context),
+                    ),
+                  ),
                 ),
               )
               .toList(),
@@ -411,7 +451,12 @@ class SettingsPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(template.name),
+              RawText(
+                progressTemplateName(
+                  template,
+                  Localizations.localeOf(context),
+                ),
+              ),
               const SizedBox(height: 4),
               Wrap(
                 spacing: 6,
@@ -420,8 +465,8 @@ class SettingsPage extends StatelessWidget {
                     .map(
                       (node) => Chip(
                         avatar: CircleAvatar(backgroundColor: node.color),
-                        label: Text(
-                          '${node.name}${node.kind == ProgressNodeKind.end ? ' ✓' : ''}',
+                        label: RawText(
+                          '${progressNodeName(node, Localizations.localeOf(context))}${node.kind == ProgressNodeKind.end ? ' ✓' : ''}',
                         ),
                       ),
                     )
@@ -455,7 +500,9 @@ class SettingsPage extends StatelessWidget {
               .map(
                 (tag) => Chip(
                   avatar: Icon(tag.icon, color: tag.color, size: 18),
-                  label: Text(tag.name),
+                  label: RawText(
+                    tagDefinitionName(tag, Localizations.localeOf(context)),
+                  ),
                   side: BorderSide(color: tag.color),
                 ),
               )
@@ -721,7 +768,10 @@ class SettingsPage extends StatelessWidget {
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
-        builder: (_) => _PlanExportSheet(controller: controller),
+        builder: (_) => _PlanExportSheet(
+          controller: controller,
+          securityService: securityService,
+        ),
       );
 
   Future<void> _showContactExport(BuildContext context) async =>
@@ -729,7 +779,10 @@ class SettingsPage extends StatelessWidget {
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
-        builder: (_) => _ContactExportSheet(controller: controller),
+        builder: (_) => _ContactExportSheet(
+          controller: controller,
+          securityService: securityService,
+        ),
       );
 
   Future<void> _importPlans(BuildContext context) async {
@@ -848,7 +901,14 @@ class SettingsPage extends StatelessWidget {
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
                     columns: columns
-                        .map((column) => DataColumn(label: Text(column.label)))
+                        .map(
+                          (column) =>
+                              DataColumn(
+                                label: RawText(
+                                  _columnLabel(context, column.keyName),
+                                ),
+                              ),
+                        )
                         .toList(),
                     rows: controller.plans
                         .map(
@@ -856,7 +916,13 @@ class SettingsPage extends StatelessWidget {
                             cells: columns
                                 .map(
                                   (column) => DataCell(
-                                    Text(_planField(plan, column.keyName)),
+                                    RawText(
+                                      _planField(
+                                        context,
+                                        plan,
+                                        column.keyName,
+                                      ),
+                                    ),
                                   ),
                                 )
                                 .toList(),
@@ -873,7 +939,8 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  String _planField(PlanItem plan, String key) => switch (key) {
+  String _planField(BuildContext context, PlanItem plan, String key) =>
+      switch (key) {
     'id' => plan.id,
     'name' => plan.name,
     'description' => plan.description,
@@ -884,8 +951,14 @@ class SettingsPage extends StatelessWidget {
     'startDate' => plan.startDate,
     'targetDate' => plan.targetDate,
     'contacts' => plan.contacts.map((item) => item.name).join('，'),
-    'calendarDisplayMode' => plan.calendarDisplayMode.label,
-    'reminderEnabled' => plan.reminderEnabled ? '是' : '否',
+    'calendarDisplayMode' => localizeUiText(
+      context,
+      plan.calendarDisplayMode.label,
+    ),
+    'reminderEnabled' => localizeUiText(
+      context,
+      plan.reminderEnabled ? '是' : '否',
+    ),
     'completedAt' => plan.completedAt?.toLocal().toIso8601String() ?? '',
     'updatedAt' => plan.updatedAt.toLocal().toIso8601String(),
     _ => '',
@@ -1084,6 +1157,116 @@ class _FontSizePageState extends State<_FontSizePage> {
   }
 }
 
+enum _SecuritySetting { launch, export }
+
+class _SecurityLockPage extends StatefulWidget {
+  const _SecurityLockPage({
+    required this.controller,
+    required this.securityService,
+  });
+
+  final AppController controller;
+  final AppSecurityService securityService;
+
+  @override
+  State<_SecurityLockPage> createState() => _SecurityLockPageState();
+}
+
+class _SecurityLockPageState extends State<_SecurityLockPage> {
+  bool _changing = false;
+
+  Future<void> _changeSetting(
+    _SecuritySetting setting,
+    bool nextValue,
+  ) async {
+    if (_changing) return;
+    setState(() => _changing = true);
+    try {
+      final result = await widget.securityService.authenticate(
+        localizedReason: localizeUiText(
+          context,
+          '验证设备所有者以修改安全锁设置',
+        ),
+      );
+      if (!mounted) return;
+      if (!result.succeeded) {
+        if (!result.canceled) {
+          _showSecurityAuthenticationError(context, result);
+        }
+        return;
+      }
+
+      if (setting == _SecuritySetting.launch) {
+        await widget.controller.setSecurityPreferences(
+          requireAuthenticationOnLaunch: nextValue,
+        );
+      } else {
+        await widget.controller.setSecurityPreferences(
+          requireAuthenticationForExport: nextValue,
+        );
+        widget.securityService.clearExportAuthorization();
+      }
+    } catch (_) {
+      if (mounted) {
+        showAppAlert(
+          context,
+          title: '保存失败',
+          message: '安全锁设置保存失败，请重试。',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _changing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: widget.controller,
+    builder: (context, _) {
+      final preferences = widget.controller.preferences;
+      return Scaffold(
+        appBar: AppBar(title: const Text('安全锁'), centerTitle: true),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 36),
+          children: [
+            Card(
+              margin: EdgeInsets.zero,
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text('App 启动验证'),
+                    subtitle: const Text('下次启动并显示欢迎页时验证'),
+                    value: preferences.requireAuthenticationOnLaunch,
+                    onChanged: _changing
+                        ? null
+                        : (value) => _changeSetting(
+                            _SecuritySetting.launch,
+                            value,
+                          ),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    title: const Text('导出验证'),
+                    subtitle: const Text('验证后 30 分钟内无需重复验证'),
+                    value: preferences.requireAuthenticationForExport,
+                    onChanged: _changing
+                        ? null
+                        : (value) => _changeSetting(
+                            _SecuritySetting.export,
+                            value,
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
 class _SettingsSection extends StatelessWidget {
   const _SettingsSection({required this.title, required this.children});
 
@@ -1129,6 +1312,7 @@ class _SettingsMenuItem extends StatelessWidget {
     required this.subtitle,
     required this.onTap,
     this.trailingIcon = Icons.chevron_right,
+    this.subtitleWidget,
   });
 
   final IconData icon;
@@ -1136,6 +1320,7 @@ class _SettingsMenuItem extends StatelessWidget {
   final String subtitle;
   final VoidCallback onTap;
   final IconData trailingIcon;
+  final Widget? subtitleWidget;
 
   @override
   Widget build(BuildContext context) {
@@ -1156,12 +1341,14 @@ class _SettingsMenuItem extends StatelessWidget {
         title,
         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
       ),
-      subtitle: Text(
-        subtitle,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
+      subtitle:
+          subtitleWidget ??
+          Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
       trailing: Icon(trailingIcon, color: colors.primary),
       onTap: onTap,
     );
@@ -1175,6 +1362,7 @@ class _SettingsChoiceMenuItem extends StatelessWidget {
     required this.value,
     required this.values,
     required this.onChanged,
+    this.valueLocales = const {},
   });
 
   final IconData icon;
@@ -1182,6 +1370,7 @@ class _SettingsChoiceMenuItem extends StatelessWidget {
   final String value;
   final Map<String, String> values;
   final ValueChanged<String> onChanged;
+  final Map<String, Locale> valueLocales;
 
   @override
   Widget build(BuildContext context) {
@@ -1208,6 +1397,7 @@ class _SettingsChoiceMenuItem extends StatelessWidget {
       ),
       menuChildren: values.entries.map((entry) {
         final selected = entry.key == value;
+        final valueLocale = valueLocales[entry.key];
         return Semantics(
           selected: selected,
           child: MenuItemButton(
@@ -1222,7 +1412,9 @@ class _SettingsChoiceMenuItem extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               textStyle: Theme.of(context).textTheme.bodyLarge,
             ),
-            child: Text(entry.value),
+            child: valueLocale == null
+                ? Text(entry.value)
+                : RawText(entry.value, locale: valueLocale),
           ),
         );
       }).toList(),
@@ -1230,6 +1422,15 @@ class _SettingsChoiceMenuItem extends StatelessWidget {
         icon: icon,
         title: title,
         subtitle: selectedLabel,
+        subtitleWidget: valueLocales[value] == null
+            ? null
+            : RawText(
+                selectedLabel,
+                locale: valueLocales[value],
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
         trailingIcon: Icons.keyboard_arrow_down_rounded,
         onTap: () {
           if (menuController.isOpen) {
@@ -1469,7 +1670,7 @@ class _ContactCardRow extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: Text(
+          child: RawText(
             value,
             softWrap: softWrap,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.4),
@@ -1489,7 +1690,13 @@ Future<void> _confirmDeleteContact(
       await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text('删除“${contact.name}”联系人？'),
+          title: RawText(
+            localizeUiTextWithArguments(
+              context,
+              '删除“{0}”联系人？',
+              [contact.name],
+            ),
+          ),
           content: const Text('该联系人将不再出现在后续选择列表中；已保存计划和任务中的姓名、电话、备注保持不变。'),
           actions: [
             TextButton(
@@ -1649,7 +1856,12 @@ class _CategoryEditor extends StatelessWidget {
                     context,
                     CategoryDefinition(
                       id: 'category-${DateTime.now().microsecondsSinceEpoch}',
-                      name: '新分类',
+                      name: presetNameForLocale(
+                        locale: Localizations.localeOf(context),
+                        id: '_new-category',
+                        fallback: '新分类',
+                        nameSource: NameSource.system,
+                      ),
                       colorValue: colors.first,
                       iconName: taskTagIconChoices.keys.first,
                       sortOrder: controller.categoryDefinitions.length,
@@ -1678,7 +1890,12 @@ class _CategoryEditor extends StatelessWidget {
                   child: ListTile(
                     contentPadding: const EdgeInsets.only(right: 4),
                     leading: Icon(category.icon, color: category.color),
-                    title: Text(category.name),
+                    title: RawText(
+                      categoryDefinitionName(
+                        category,
+                        Localizations.localeOf(context),
+                      ),
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1712,7 +1929,10 @@ class _CategoryEditor extends StatelessWidget {
   );
 
   Future<void> _edit(BuildContext context, CategoryDefinition original) async {
-    final name = TextEditingController(text: original.name);
+    final locale = Localizations.localeOf(context);
+    final name = TextEditingController(
+      text: categoryDefinitionName(original, locale),
+    );
     var color = original.colorValue;
     var iconName = original.iconName;
     final saved = await showDialog<bool>(
@@ -1795,6 +2015,7 @@ class _CategoryEditor extends StatelessWidget {
             colorValue: color,
             iconName: iconName,
           ),
+          locale,
         );
       } catch (exception) {
         if (context.mounted) {
@@ -1898,7 +2119,7 @@ class _ProgressTemplateEditor extends StatelessWidget {
           onPressed:
               controller.progressTemplates.length >= maxProgressTemplateCount
               ? null
-              : () => _openTemplate(context, _newTemplate()),
+              : () => _openTemplate(context, _newTemplate(context)),
           icon: const Icon(Icons.add),
           label: const Text('添加进度方案'),
         ),
@@ -1906,23 +2127,39 @@ class _ProgressTemplateEditor extends StatelessWidget {
     ),
   );
 
-  ProgressTemplate _newTemplate() {
+  ProgressTemplate _newTemplate(BuildContext context) {
     final stamp = DateTime.now().microsecondsSinceEpoch;
+    final locale = Localizations.localeOf(context);
     return ProgressTemplate(
       id: 'progress-$stamp',
-      name: '新进度',
+      name: presetNameForLocale(
+        locale: locale,
+        id: '_new-progress',
+        fallback: '新进度',
+        nameSource: NameSource.system,
+      ),
       sortOrder: controller.progressTemplates.length,
       nodes: [
         ProgressNode(
           id: 'progress-$stamp-start',
-          name: '未开始',
+          name: presetNameForLocale(
+            locale: locale,
+            id: 'default-todo',
+            fallback: '未开始',
+            nameSource: NameSource.system,
+          ),
           colorValue: 0xff8e8e93,
           kind: ProgressNodeKind.start,
           sortOrder: 0,
         ),
         ProgressNode(
           id: 'progress-$stamp-end',
-          name: '已完成',
+          name: presetNameForLocale(
+            locale: locale,
+            id: 'default-done',
+            fallback: '已完成',
+            nameSource: NameSource.system,
+          ),
           colorValue: 0xff34c759,
           kind: ProgressNodeKind.end,
           sortOrder: 1,
@@ -1935,7 +2172,11 @@ class _ProgressTemplateEditor extends StatelessWidget {
       Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
           builder: (_) =>
-              _ProgressTemplateForm(controller: controller, template: template),
+              _ProgressTemplateForm(
+                controller: controller,
+                template: template,
+                locale: Localizations.localeOf(context),
+              ),
         ),
       );
 
@@ -1989,8 +2230,11 @@ class _ProgressTemplateCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          template.name,
+                        RawText(
+                          progressTemplateName(
+                            template,
+                            Localizations.localeOf(context),
+                          ),
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
@@ -2068,7 +2312,10 @@ class _ProgressNodeLabel extends StatelessWidget {
       children: [
         Icon(Icons.circle, color: node.color, size: 9),
         const SizedBox(width: 6),
-        Text(node.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+        RawText(
+          progressNodeName(node, Localizations.localeOf(context)),
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
       ],
     ),
   );
@@ -2078,9 +2325,11 @@ class _ProgressTemplateForm extends StatefulWidget {
   const _ProgressTemplateForm({
     required this.controller,
     required this.template,
+    required this.locale,
   });
   final AppController controller;
   final ProgressTemplate template;
+  final Locale locale;
 
   @override
   State<_ProgressTemplateForm> createState() => _ProgressTemplateFormState();
@@ -2093,8 +2342,16 @@ class _ProgressTemplateFormState extends State<_ProgressTemplateForm> {
   @override
   void initState() {
     super.initState();
-    name = TextEditingController(text: widget.template.name);
-    nodes = [...widget.template.nodes];
+    name = TextEditingController(
+      text: progressTemplateName(widget.template, widget.locale),
+    );
+    nodes = widget.template.nodes
+        .map(
+          (node) => node.copyWith(
+            name: progressNodeName(node, widget.locale),
+          ),
+        )
+        .toList();
   }
 
   @override
@@ -2222,7 +2479,12 @@ class _ProgressTemplateFormState extends State<_ProgressTemplateForm> {
                     insertionIndex,
                     ProgressNode(
                       id: '${widget.template.id}-node-$stamp',
-                      name: '新节点',
+                      name: presetNameForLocale(
+                        locale: widget.locale,
+                        id: '_new-node',
+                        fallback: '新节点',
+                        nameSource: NameSource.system,
+                      ),
                       colorValue: 0xff007aff,
                       kind: ProgressNodeKind.middle,
                       sortOrder: insertionIndex,
@@ -2248,6 +2510,7 @@ class _ProgressTemplateFormState extends State<_ProgressTemplateForm> {
                     .map((entry) => entry.value.copyWith(sortOrder: entry.key))
                     .toList(),
               ),
+              widget.locale,
             );
             if (context.mounted) Navigator.pop(context);
           } catch (exception) {
@@ -2403,7 +2666,9 @@ class _TagEditorState extends State<_TagEditor> {
 
   Widget _buildSummary(BuildContext context, TaskTagDefinition tag) => ListTile(
     leading: Icon(tag.icon, color: tag.color),
-    title: Text(tag.name),
+    title: RawText(
+      tagDefinitionName(tag, Localizations.localeOf(context)),
+    ),
     trailing: tag.isQuadrant
         ? null
         : Row(
@@ -2413,7 +2678,10 @@ class _TagEditorState extends State<_TagEditor> {
                 tooltip: localizeUiText(context, '编辑标签'),
                 onPressed: () => setState(() {
                   _editingTagIds.add(tag.id);
-                  _draftTagNames[tag.id] = tag.name;
+                  _draftTagNames[tag.id] = tagDefinitionName(
+                    tag,
+                    Localizations.localeOf(context),
+                  );
                 }),
                 icon: const Icon(Icons.edit_outlined),
               ),
@@ -2443,14 +2711,26 @@ class _TagEditorState extends State<_TagEditor> {
                       ),
                       child: Row(
                         children: [
-                          Expanded(child: Text(tag.name)),
+                          Expanded(
+                            child: RawText(
+                              tagDefinitionName(
+                                tag,
+                                Localizations.localeOf(context),
+                              ),
+                            ),
+                          ),
                           const Icon(Icons.lock_outline, size: 18),
                         ],
                       ),
                     )
                   : TextFormField(
                       key: ValueKey('${tag.id}-${tag.name}'),
-                      initialValue: tag.name,
+                      initialValue:
+                          _draftTagNames[tag.id] ??
+                          tagDefinitionName(
+                            tag,
+                            Localizations.localeOf(context),
+                          ),
                       maxLength: maxTagNameLength,
                       decoration: InputDecoration(
                         labelText: localizeUiText(context, '标签名称'),
@@ -2521,7 +2801,10 @@ class _TagEditorState extends State<_TagEditor> {
 
   Future<bool> _save(BuildContext context, TaskTagDefinition tag) async {
     try {
-      await widget.controller.saveTagDefinition(tag);
+      await widget.controller.saveTagDefinition(
+        tag,
+        Localizations.localeOf(context),
+      );
       return true;
     } catch (exception) {
       if (context.mounted) _message(context, exception);
@@ -2542,13 +2825,20 @@ class _TagEditorState extends State<_TagEditor> {
     }
 
     var suffix = 1;
-    var name = '新标签';
+    final locale = Localizations.localeOf(context);
+    final baseName = presetNameForLocale(
+      locale: locale,
+      id: '_new-tag',
+      fallback: '新标签',
+      nameSource: NameSource.system,
+    );
+    var name = baseName;
     final names = widget.controller.tagDefinitions
         .map((tag) => tag.name.toLowerCase())
         .toSet();
     while (names.contains(name.toLowerCase())) {
       suffix++;
-      name = '新标签 $suffix';
+      name = '$baseName $suffix';
     }
     final tag = TaskTagDefinition(
       id: 'tag-${DateTime.now().microsecondsSinceEpoch}',
@@ -2592,7 +2882,13 @@ class _TagEditorState extends State<_TagEditor> {
         await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: Text('删除“${tag.name}”标签配置？'),
+            title: RawText(
+              localizeUiTextWithArguments(
+                context,
+                '删除“{0}”标签配置？',
+                [tag.name],
+              ),
+            ),
             content: const Text('历史任务中已经保存的标签名称会继续保留，并显示为历史标签。'),
             actions: [
               TextButton(
@@ -2681,7 +2977,7 @@ class _ColumnEditorState extends State<_ColumnEditor> {
               return SwitchListTile(
                 key: ValueKey(column.keyName),
                 secondary: const Icon(Icons.drag_handle),
-                title: Text(column.label),
+                title: RawText(_columnLabel(context, column.keyName)),
                 value: column.visible,
                 onChanged: column.keyName == 'name'
                     ? null
@@ -2777,7 +3073,7 @@ class _ImportPreviewState extends State<_ImportPreview> {
                   ExpansionTile(
                     title: Text('新增计划（${additions.length}）'),
                     children: additions
-                        .map((plan) => ListTile(title: Text(plan.name)))
+                        .map((plan) => ListTile(title: RawText(plan.name)))
                         .toList(),
                   ),
                 ...conflicts.map((remote) {
@@ -2793,7 +3089,7 @@ class _ImportPreviewState extends State<_ImportPreview> {
                     () => <String>{},
                   );
                   return ExpansionTile(
-                    title: Text(remote.name),
+                    title: RawText(remote.name),
                     subtitle: Text('${changed.length} 个字段不同；默认保留本地'),
                     children: changed
                         .map(
@@ -2804,9 +3100,29 @@ class _ImportPreviewState extends State<_ImportPreview> {
                                   ? selected.add(field)
                                   : selected.remove(field),
                             ),
-                            title: Text(_label(field)),
-                            subtitle: Text(
-                              '本地：${_value(local, field)}\n导入：${_value(remote, field)}',
+                            title: RawText(_label(context, field)),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('本地：'),
+                                    Expanded(
+                                      child: RawText(_value(local, field)),
+                                    ),
+                                  ],
+                                ),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('导入：'),
+                                    Expanded(
+                                      child: RawText(_value(remote, field)),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
                         )
@@ -2871,6 +3187,9 @@ class _ImportPreviewState extends State<_ImportPreview> {
       categoryName: selected.contains('category')
           ? remote.categoryName
           : local.categoryName,
+      sourceCategoryId: selected.contains('category')
+          ? remote.sourceCategoryId
+          : local.sourceCategoryId,
       categoryColorValue: selected.contains('category')
           ? remote.categoryColorValue
           : local.categoryColorValue,
@@ -2961,7 +3280,8 @@ class _ImportPreviewState extends State<_ImportPreview> {
     _ => '',
   };
 
-  String _label(String field) => XlsxService.headers[field] ?? field;
+  String _label(BuildContext context, String field) =>
+      XlsxService.localizedHeader(Localizations.localeOf(context), field);
 }
 
 class _ContactImportPreview extends StatefulWidget {
@@ -3030,8 +3350,8 @@ class _ContactImportPreviewState extends State<_ContactImportPreview> {
                     children: additions
                         .map(
                           (contact) => ListTile(
-                            title: Text(contact.name),
-                            subtitle: Text(contact.phone),
+                            title: RawText(contact.name),
+                            subtitle: RawText(contact.phone),
                           ),
                         )
                         .toList(),
@@ -3043,8 +3363,8 @@ class _ContactImportPreviewState extends State<_ContactImportPreview> {
                     children: updates
                         .map(
                           (contact) => ListTile(
-                            title: Text(contact.name),
-                            subtitle: Text(contact.phone),
+                            title: RawText(contact.name),
+                            subtitle: RawText(contact.phone),
                           ),
                         )
                         .toList(),
@@ -3092,10 +3412,16 @@ enum _ExportScope { all, filtered }
 
 enum _PlanExportCompletion { all, unfinished, completed }
 
+enum _ExportOperationState { idle, authenticating, exporting }
+
 class _PlanExportSheet extends StatefulWidget {
-  const _PlanExportSheet({required this.controller});
+  const _PlanExportSheet({
+    required this.controller,
+    required this.securityService,
+  });
 
   final AppController controller;
+  final AppSecurityService securityService;
 
   @override
   State<_PlanExportSheet> createState() => _PlanExportSheetState();
@@ -3107,11 +3433,11 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
   DateTimeRange? dateRange;
   _PlanExportCompletion completion = _PlanExportCompletion.all;
   String categoryName = '';
-  String progressTemplateName = '';
-  String progressNodeName = '';
+  String selectedProgressTemplateName = '';
+  String selectedProgressNodeName = '';
   final selectedTagNames = <String>{};
   final selectedContactIds = <String>{};
-  bool exporting = false;
+  _ExportOperationState operationState = _ExportOperationState.idle;
 
   @override
   void initState() {
@@ -3153,12 +3479,12 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
       if (categoryName.isNotEmpty && plan.categoryName != categoryName) {
         return false;
       }
-      if (progressTemplateName.isNotEmpty &&
-          plan.progress.templateName != progressTemplateName) {
+      if (selectedProgressTemplateName.isNotEmpty &&
+          plan.progress.templateName != selectedProgressTemplateName) {
         return false;
       }
-      if (progressNodeName.isNotEmpty &&
-          plan.progress.currentNode?.name != progressNodeName) {
+      if (selectedProgressNodeName.isNotEmpty &&
+          plan.progress.currentNode?.name != selectedProgressNodeName) {
         return false;
       }
       if (keyword.isNotEmpty &&
@@ -3186,7 +3512,7 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
     final templates = widget.controller.progressTemplates;
     final selectedTemplate = _progressTemplateByName(
       templates,
-      progressTemplateName,
+      selectedProgressTemplateName,
     );
     return DraggableScrollableSheet(
       expand: false,
@@ -3289,7 +3615,12 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                       ...widget.controller.categoryDefinitions.map(
                         (category) => DropdownMenuItem(
                           value: category.name,
-                          child: Text(category.name),
+                          child: RawText(
+                            categoryDefinitionName(
+                              category,
+                              Localizations.localeOf(context),
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -3298,8 +3629,10 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    key: ValueKey('export-template-$progressTemplateName'),
-                    initialValue: progressTemplateName,
+                    key: ValueKey(
+                      'export-template-$selectedProgressTemplateName',
+                    ),
+                    initialValue: selectedProgressTemplateName,
                     decoration: InputDecoration(
                       labelText: localizeUiText(context, '进度方案'),
                     ),
@@ -3308,22 +3641,28 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                       ...templates.map(
                         (template) => DropdownMenuItem(
                           value: template.name,
-                          child: Text(template.name),
+                          child: RawText(
+                            progressTemplateName(
+                              template,
+                              Localizations.localeOf(context),
+                            ),
+                          ),
                         ),
                       ),
                     ],
                     onChanged: (value) => setState(() {
-                      progressTemplateName = value ?? '';
-                      progressNodeName = '';
+                      selectedProgressTemplateName = value ?? '';
+                      selectedProgressNodeName = '';
                     }),
                   ),
                   if (selectedTemplate != null) ...[
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       key: ValueKey(
-                        'export-node-$progressTemplateName-$progressNodeName',
+                        'export-node-$selectedProgressTemplateName-'
+                        '$selectedProgressNodeName',
                       ),
-                      initialValue: progressNodeName,
+                      initialValue: selectedProgressNodeName,
                       decoration: InputDecoration(
                         labelText: localizeUiText(context, '进度节点'),
                       ),
@@ -3335,12 +3674,19 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                         ...selectedTemplate.nodes.map(
                           (node) => DropdownMenuItem(
                             value: node.name,
-                            child: Text(node.name),
+                            child: RawText(
+                              progressNodeName(
+                                node,
+                                Localizations.localeOf(context),
+                              ),
+                            ),
                           ),
                         ),
                       ],
                       onChanged: (value) =>
-                          setState(() => progressNodeName = value ?? ''),
+                          setState(
+                            () => selectedProgressNodeName = value ?? '',
+                          ),
                     ),
                   ],
                   if (widget.controller.tagDefinitions.isNotEmpty) ...[
@@ -3356,7 +3702,12 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                       children: widget.controller.tagDefinitions
                           .map(
                             (tag) => FilterChip(
-                              label: Text(tag.name),
+                              label: RawText(
+                                tagDefinitionName(
+                                  tag,
+                                  Localizations.localeOf(context),
+                                ),
+                              ),
                               selected: selectedTagNames.contains(tag.name),
                               onSelected: (selected) => setState(
                                 () => selected
@@ -3381,7 +3732,7 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
                       children: widget.controller.contacts
                           .map(
                             (contact) => FilterChip(
-                              label: Text(contact.name),
+                              label: RawText(contact.name),
                               selected: selectedContactIds.contains(contact.id),
                               onSelected: (selected) => setState(
                                 () => selected
@@ -3399,7 +3750,7 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
           ),
           _ExportSheetFooter(
             count: matches.length,
-            exporting: exporting,
+            operationState: operationState,
             onExport: matches.isEmpty ? null : () => _export(matches),
           ),
         ],
@@ -3421,7 +3772,28 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
   }
 
   Future<void> _export(List<PlanItem> plans) async {
-    setState(() => exporting = true);
+    if (operationState != _ExportOperationState.idle) return;
+    setState(
+      () => operationState = _ExportOperationState.authenticating,
+    );
+    final authentication = await widget.securityService.authorizeExport(
+      authenticationRequired:
+          widget.controller.preferences.requireAuthenticationForExport,
+      localizedReason: localizeUiText(
+        context,
+        '验证设备所有者以导出 ClPlan 数据',
+      ),
+    );
+    if (!mounted) return;
+    if (!authentication.succeeded) {
+      setState(() => operationState = _ExportOperationState.idle);
+      if (!authentication.canceled) {
+        _showSecurityAuthenticationError(context, authentication);
+      }
+      return;
+    }
+
+    setState(() => operationState = _ExportOperationState.exporting);
     try {
       await XlsxService.exportPlans(
         plans: plans,
@@ -3429,20 +3801,27 @@ class _PlanExportSheetState extends State<_PlanExportSheet> {
         progressTemplates: widget.controller.progressTemplates,
         tags: widget.controller.tagDefinitions,
         contacts: widget.controller.contacts,
+        locale: Localizations.localeOf(context),
       );
       if (mounted) Navigator.pop(context);
     } catch (exception) {
       if (mounted) _showExportError(context, exception);
     } finally {
-      if (mounted) setState(() => exporting = false);
+      if (mounted) {
+        setState(() => operationState = _ExportOperationState.idle);
+      }
     }
   }
 }
 
 class _ContactExportSheet extends StatefulWidget {
-  const _ContactExportSheet({required this.controller});
+  const _ContactExportSheet({
+    required this.controller,
+    required this.securityService,
+  });
 
   final AppController controller;
+  final AppSecurityService securityService;
 
   @override
   State<_ContactExportSheet> createState() => _ContactExportSheetState();
@@ -3454,7 +3833,7 @@ class _ContactExportSheetState extends State<_ContactExportSheet> {
   late final TextEditingController keywordController;
   _ExportScope scope = _ExportScope.all;
   final selectedContactIds = <String>{};
-  bool exporting = false;
+  _ExportOperationState operationState = _ExportOperationState.idle;
 
   @override
   void initState() {
@@ -3585,7 +3964,7 @@ class _ContactExportSheetState extends State<_ContactExportSheet> {
                         itemBuilder: (context, index) {
                           final contact = selected[index];
                           return InputChip(
-                            label: Text(contact.name),
+                            label: RawText(contact.name),
                             onDeleted: () => setState(
                               () => selectedContactIds.remove(contact.id),
                             ),
@@ -3637,7 +4016,7 @@ class _ContactExportSheetState extends State<_ContactExportSheet> {
                               value: isSelected,
                               dense: true,
                               controlAffinity: ListTileControlAffinity.leading,
-                              title: Text(contact.name),
+                              title: RawText(contact.name),
                               subtitle: _contactSearchSubtitle(contact),
                               onChanged: (checked) => setState(() {
                                 if (checked ?? false) {
@@ -3667,7 +4046,7 @@ class _ContactExportSheetState extends State<_ContactExportSheet> {
           ),
           _ExportSheetFooter(
             count: matches.length,
-            exporting: exporting,
+            operationState: operationState,
             onExport: matches.isEmpty ? null : () => _export(matches),
           ),
         ],
@@ -3680,18 +4059,44 @@ class _ContactExportSheetState extends State<_ContactExportSheet> {
       if (contact.phone.trim().isNotEmpty) contact.phone.trim(),
       if (contact.remark.trim().isNotEmpty) contact.remark.trim(),
     ];
-    return details.isEmpty ? null : Text(details.join(' · '));
+    return details.isEmpty ? null : RawText(details.join(' · '));
   }
 
   Future<void> _export(List<ContactEntry> contacts) async {
-    setState(() => exporting = true);
+    if (operationState != _ExportOperationState.idle) return;
+    setState(
+      () => operationState = _ExportOperationState.authenticating,
+    );
+    final authentication = await widget.securityService.authorizeExport(
+      authenticationRequired:
+          widget.controller.preferences.requireAuthenticationForExport,
+      localizedReason: localizeUiText(
+        context,
+        '验证设备所有者以导出 ClPlan 数据',
+      ),
+    );
+    if (!mounted) return;
+    if (!authentication.succeeded) {
+      setState(() => operationState = _ExportOperationState.idle);
+      if (!authentication.canceled) {
+        _showSecurityAuthenticationError(context, authentication);
+      }
+      return;
+    }
+
+    setState(() => operationState = _ExportOperationState.exporting);
     try {
-      await XlsxService.exportContacts(contacts: contacts);
+      await XlsxService.exportContacts(
+        contacts: contacts,
+        locale: Localizations.localeOf(context),
+      );
       if (mounted) Navigator.pop(context);
     } catch (exception) {
       if (mounted) _showExportError(context, exception);
     } finally {
-      if (mounted) setState(() => exporting = false);
+      if (mounted) {
+        setState(() => operationState = _ExportOperationState.idle);
+      }
     }
   }
 }
@@ -3741,12 +4146,12 @@ class _ExportSheetHeader extends StatelessWidget {
 class _ExportSheetFooter extends StatelessWidget {
   const _ExportSheetFooter({
     required this.count,
-    required this.exporting,
+    required this.operationState,
     required this.onExport,
   });
 
   final int count;
-  final bool exporting;
+  final _ExportOperationState operationState;
   final VoidCallback? onExport;
 
   @override
@@ -3762,11 +4167,19 @@ class _ExportSheetFooter extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         FilledButton.icon(
-          onPressed: exporting ? null : onExport,
+          onPressed: operationState == _ExportOperationState.idle
+              ? onExport
+              : null,
           icon: const Icon(Icons.ios_share),
           label: Padding(
             padding: const EdgeInsets.symmetric(vertical: 13),
-            child: Text(exporting ? '导出中…' : '确认导出'),
+            child: Text(
+              switch (operationState) {
+                _ExportOperationState.authenticating => '验证中…',
+                _ExportOperationState.exporting => '导出中…',
+                _ExportOperationState.idle => '确认导出',
+              },
+            ),
           ),
         ),
       ],
@@ -3792,4 +4205,18 @@ ProgressTemplate? _progressTemplateByName(
 void _showExportError(BuildContext context, Object exception) {
   final message = exception.toString().replaceFirst('Bad state: ', '');
   showAppAlert(context, title: '导出失败', message: message);
+}
+
+void _showSecurityAuthenticationError(
+  BuildContext context,
+  AppAuthenticationResult result,
+) {
+  final message = switch (result.outcome) {
+    AppAuthenticationOutcome.unavailable =>
+      '请先在系统设置中设置设备密码或生物识别。',
+    AppAuthenticationOutcome.lockedOut =>
+      '系统认证已暂时锁定，请稍后重试或使用设备密码。',
+    _ => '系统无法完成身份验证，请重试。',
+  };
+  showAppAlert(context, title: '无法验证身份', message: message);
 }

@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import 'app_controller.dart';
 import 'models.dart';
+import 'l10n/preset_text.dart';
 import 'l10n/ui_text.dart';
 import 'tag_summary.dart';
 import 'ui/app_alert.dart';
@@ -32,7 +33,13 @@ class TaskCard extends StatelessWidget {
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('删除任务？'),
-            content: Text('确定删除“${task.title}”吗？'),
+            content: RawText(
+              localizeUiTextWithArguments(
+                dialogContext,
+                '确定删除“{0}”吗？',
+                [task.title],
+              ),
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
@@ -86,7 +93,17 @@ class TaskCard extends StatelessWidget {
           final snapshot = snapshotsByName[name];
           final definition = controller.tagDefinitionForName(name);
           return CardTagItem(
-            name: name,
+            name: snapshot != null
+                ? controller.displayTagName(
+                    snapshot,
+                    Localizations.localeOf(context),
+                  )
+                : definition == null
+                ? name
+                : tagDefinitionName(
+                    definition,
+                    Localizations.localeOf(context),
+                  ),
             icon: snapshot == null
                 ? definition?.icon ?? Icons.history
                 : taskTagIcons[snapshot.iconName] ?? Icons.history,
@@ -131,7 +148,7 @@ class TaskCard extends StatelessWidget {
                         ),
                       ),
                     Expanded(
-                      child: Text(
+                      child: RawText(
                         task.title,
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
@@ -141,7 +158,15 @@ class TaskCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     _StatusBadge(
-                      name: progressNode?.name ?? legacyStatus.name,
+                      name: progressNode == null
+                          ? controller.displayStatusName(
+                              legacyStatus,
+                              Localizations.localeOf(context),
+                            )
+                          : controller.displayProgressNodeName(
+                              progressNode,
+                              Localizations.localeOf(context),
+                            ),
                       color: progressNode?.color ?? legacyStatus.color,
                     ),
                   ],
@@ -149,15 +174,27 @@ class TaskCard extends StatelessWidget {
                 if (parent != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 5),
-                    child: Text(
-                      '主任务：${parent.title}',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    child: Row(
+                      children: [
+                        Text(
+                          '主任务：',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        Expanded(
+                          child: RawText(
+                            parent.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 if (task.description.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Text(
+                    child: RawText(
                       task.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -173,12 +210,12 @@ class TaskCard extends StatelessWidget {
                       spacing: 12,
                       children: [
                         if (task.type.isNotEmpty)
-                          Text(
-                            '◇ ${task.type}',
+                          RawText(
+                            '◇ ${controller.displayCategoryName(task.sourceCategoryId, task.type, Localizations.localeOf(context))}',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         if (contactText.isNotEmpty)
-                          Text(
+                          RawText(
                             '♙ $contactText',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -257,7 +294,7 @@ class _StatusBadge extends StatelessWidget {
       border: Border.all(color: color),
       borderRadius: BorderRadius.circular(20),
     ),
-    child: Text(
+    child: RawText(
       name,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,

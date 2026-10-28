@@ -100,16 +100,25 @@ class WorkSummary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title.trim().isEmpty ? '未命名' : title.trim(),
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              height: 1.25,
+          if (title.trim().isEmpty)
+            Text(
+              '未命名',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                height: 1.25,
+              ),
+            )
+          else
+            RawText(
+              title.trim(),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                height: 1.25,
+              ),
             ),
-          ),
           if ((description ?? '').trim().isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(
+            RawText(
               description!.trim(),
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: colors.onSurfaceVariant,
@@ -134,7 +143,7 @@ class WorkSummary extends StatelessWidget {
                         color: colors.secondaryContainer,
                         borderRadius: BorderRadius.circular(999),
                       ),
-                      child: Text(
+                      child: RawText(
                         item,
                         style: theme.textTheme.labelMedium?.copyWith(
                           color: colors.onSecondaryContainer,
@@ -224,13 +233,26 @@ class WorkValueField extends StatelessWidget {
                       ?.copyWith(color: colors.onSurfaceVariant),
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  value.trim().isEmpty ? '未设置' : value,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: enabled ? colors.onSurface : colors.onSurfaceVariant,
-                    height: 1.35,
+                if (value.trim().isEmpty)
+                  Text(
+                    '未设置',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: enabled
+                          ? colors.onSurface
+                          : colors.onSurfaceVariant,
+                      height: 1.35,
+                    ),
+                  )
+                else
+                  RawText(
+                    value,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: enabled
+                          ? colors.onSurface
+                          : colors.onSurfaceVariant,
+                      height: 1.35,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -281,9 +303,9 @@ class WorkActivityItem extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(text, style: const TextStyle(height: 1.45)),
+              RawText(text, style: const TextStyle(height: 1.45)),
               const SizedBox(height: 3),
-              Text(
+              RawText(
                 time,
                 style: Theme.of(context).textTheme.bodySmall
                     ?.copyWith(color: colors.onSurfaceVariant),

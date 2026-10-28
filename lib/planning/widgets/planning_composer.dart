@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' hide Text;
 
 import '../../app_controller.dart';
 import '../../l10n/l10n.dart';
+import '../../l10n/preset_text.dart';
 import '../../l10n/ui_text.dart';
 import '../../models.dart';
 import '../../task_widgets.dart';
@@ -58,6 +59,19 @@ class _PlanningComposerState extends State<PlanningComposer> {
   late final PlanningViewModel viewModel;
   bool allowClose = false;
 
+  Locale get _locale {
+    final parts = widget.localeTag.replaceAll('_', '-').split('-');
+    return Locale.fromSubtags(
+      languageCode: parts.first,
+      scriptCode: parts.length > 1 && parts[1].length == 4 ? parts[1] : null,
+      countryCode: parts.length > 1 && parts[1].length != 4
+          ? parts[1]
+          : parts.length > 2
+          ? parts[2]
+          : null,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -68,7 +82,7 @@ class _PlanningComposerState extends State<PlanningComposer> {
       defaultReminderMinutes:
           widget.controller.preferences.defaultReminderMinutes,
       availableTags: widget.controller.tagDefinitions
-          .map((tag) => tag.name)
+          .map((tag) => tagDefinitionName(tag, _locale))
           .toSet(),
     );
   }
@@ -89,16 +103,16 @@ class _PlanningComposerState extends State<PlanningComposer> {
         await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            title: Text(strings.planningDiscardTitle),
-            content: Text(strings.planningDiscardMessage),
+            title: RawText(strings.planningDiscardTitle),
+            content: RawText(strings.planningDiscardMessage),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text(strings.planningContinueEditing),
+                child: RawText(strings.planningContinueEditing),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(dialogContext, true),
-                child: Text(strings.planningDiscard),
+                child: RawText(strings.planningDiscard),
               ),
             ],
           ),
@@ -140,7 +154,19 @@ class _PlanningComposerState extends State<PlanningComposer> {
 
   Future<void> _openEditor(PlanningDraft? draft) async {
     if (draft == null) return;
-    final saved = await widget.openEditor(draft);
+    final normalizedTags = draft.tags.map((name) {
+      return widget.controller.tagDefinitionForDisplayName(name, _locale)?.name ??
+          name;
+    }).toSet();
+    final saved = await widget.openEditor(
+      PlanningDraft(
+        title: draft.title,
+        description: draft.description,
+        schedule: draft.schedule,
+        reminders: draft.reminders,
+        tags: normalizedTags,
+      ),
+    );
     if (!mounted || saved != true) return;
     _closeSheet(true);
   }
@@ -190,7 +216,7 @@ class _PlanningComposerState extends State<PlanningComposer> {
                     Expanded(
                       child: Semantics(
                         header: true,
-                        child: Text(
+                        child: RawText(
                           widget.targetKind == PlanningTargetKind.plan
                               ? strings.planningPlanTitle
                               : strings.planningTaskTitle,
@@ -200,7 +226,7 @@ class _PlanningComposerState extends State<PlanningComposer> {
                       ),
                     ),
                     IconButton(
-                      tooltip: localizeUiText(context, strings.planningClose),
+                      tooltip: strings.planningClose,
                       onPressed: _attemptClose,
                       icon: const Icon(Icons.close),
                     ),
@@ -222,16 +248,11 @@ class _PlanningComposerState extends State<PlanningComposer> {
                           maxLength: 100,
                           textInputAction: TextInputAction.newline,
                           decoration: InputDecoration(
-                            labelText: localizeUiText(
-                              context,
-                              widget.targetKind == PlanningTargetKind.plan
-                                  ? strings.planningPlanInputLabel
-                                  : strings.planningTaskInputLabel,
-                            ),
-                            hintText: localizeUiText(
-                              context,
-                              strings.planningInputHint,
-                            ),
+                            labelText:
+                                widget.targetKind == PlanningTargetKind.plan
+                                ? strings.planningPlanInputLabel
+                                : strings.planningTaskInputLabel,
+                            hintText: strings.planningInputHint,
                             alignLabelWithHint: true,
                           ),
                         ),
@@ -240,10 +261,7 @@ class _PlanningComposerState extends State<PlanningComposer> {
                             padding: const EdgeInsets.only(top: 8),
                             child: Semantics(
                               liveRegion: true,
-                              label: localizeUiText(
-                                context,
-                                strings.planningAnalysisInProgress,
-                              ),
+                              label: strings.planningAnalysisInProgress,
                               child: const ExcludeSemantics(
                                 child: LinearProgressIndicator(),
                               ),
@@ -254,14 +272,16 @@ class _PlanningComposerState extends State<PlanningComposer> {
                             padding: const EdgeInsets.only(top: 12),
                             child: Semantics(
                               liveRegion: true,
-                              child: Text(strings.planningAnalysisUnavailable),
+                              child: RawText(
+                                strings.planningAnalysisUnavailable,
+                              ),
                             ),
                           ),
                         if (proposal != null) ...[
                           const SizedBox(height: 16),
                           Semantics(
                             header: true,
-                            child: Text(
+                            child: RawText(
                               strings.planningSuggestedTitle,
                               style: Theme.of(context).textTheme.labelLarge,
                             ),
@@ -302,7 +322,7 @@ class _PlanningComposerState extends State<PlanningComposer> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
+                                  RawText(
                                     strings.planningAlarmUnsupported,
                                     style: TextStyle(
                                       color: Theme.of(context)
@@ -315,14 +335,14 @@ class _PlanningComposerState extends State<PlanningComposer> {
                                     spacing: 8,
                                     children: [
                                       ActionChip(
-                                        label: Text(
+                                        label: RawText(
                                           strings.planningConvertToNotification,
                                         ),
                                         onPressed: viewModel
                                             .convertAlarmsToNotifications,
                                       ),
                                       ActionChip(
-                                        label: Text(
+                                        label: RawText(
                                           strings.planningRemoveReminder,
                                         ),
                                         onPressed: viewModel.removeReminders,
@@ -334,7 +354,7 @@ class _PlanningComposerState extends State<PlanningComposer> {
                             ),
                           ],
                           const SizedBox(height: 6),
-                          Text(
+                          RawText(
                             _sourceDescription(
                               context,
                               viewModel.result?.metadata,
@@ -353,13 +373,13 @@ class _PlanningComposerState extends State<PlanningComposer> {
                       onPressed: viewModel.hasInput
                           ? () => _openEditor(viewModel.createRawDraft())
                           : null,
-                      child: Text(strings.planningUseRawText),
+                      child: RawText(strings.planningUseRawText),
                     );
                     final applyButton = FilledButton(
                       onPressed: viewModel.canContinue && !unsupportedAlarm
                           ? () => _openEditor(viewModel.createDraft())
                           : null,
-                      child: Text(strings.planningApplyAndContinue),
+                      child: RawText(strings.planningApplyAndContinue),
                     );
                     final textScale = MediaQuery.textScalerOf(context).scale(1);
                     if (constraints.maxWidth < 310 || textScale > 1.2) {

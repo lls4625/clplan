@@ -9,6 +9,7 @@ import 'l10n/l10n.dart';
 import 'l10n/ui_text.dart';
 import 'plan_editor.dart';
 import 'plans_page.dart';
+import 'security/app_security_service.dart';
 import 'settings_page.dart';
 import 'stats_page.dart';
 import 'task_editor.dart';
@@ -17,8 +18,13 @@ import 'ui/app_alert.dart';
 import 'ui/glass_bottom_navigation.dart';
 
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key, required this.controller});
+  const HomeShell({
+    super.key,
+    required this.controller,
+    required this.securityService,
+  });
   final AppController controller;
+  final AppSecurityService securityService;
   @override
   State<HomeShell> createState() => _HomeShellState();
 }
@@ -92,6 +98,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           SettingsPage(
             controller: widget.controller,
             developerTipController: developerTipController,
+            securityService: widget.securityService,
           ),
         ];
         return Scaffold(
@@ -101,7 +108,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             automaticallyImplyLeading: false,
             centerTitle: true,
             leadingWidth: switch (index) {
-              0 => 132,
+              0 => 96,
               1 => 112,
               _ => null,
             },
@@ -239,10 +246,15 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         onPressed: () => calendarKey.currentState?.toggleCalendarView(),
         icon: const Icon(Icons.grid_view_outlined),
       ),
-      Expanded(
+      SizedBox.square(
+        dimension: 48,
         child: Tooltip(
           message: '返回当前日期',
           child: TextButton(
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size.square(48),
+            ),
             onPressed: () => calendarKey.currentState?.goToToday(),
             child: Text('${DateTime.now().day}'),
           ),

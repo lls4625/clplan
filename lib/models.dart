@@ -10,6 +10,11 @@ const maxProgressNodeCount = 20;
 const maxProgressNodeNameLength = 30;
 const maxContactRemarkLength = 100;
 
+enum NameSource { system, user }
+
+NameSource nameSourceFromName(String? value) =>
+    value == NameSource.system.name ? NameSource.system : NameSource.user;
+
 class TaskStatus {
   const TaskStatus({
     required this.id,
@@ -17,6 +22,7 @@ class TaskStatus {
     required this.colorValue,
     required this.completed,
     required this.sortOrder,
+    this.nameSource = NameSource.user,
   });
 
   final String id;
@@ -24,6 +30,7 @@ class TaskStatus {
   final int colorValue;
   final bool completed;
   final int sortOrder;
+  final NameSource nameSource;
 
   Color get color => Color(colorValue);
 
@@ -33,12 +40,14 @@ class TaskStatus {
     int? colorValue,
     bool? completed,
     int? sortOrder,
+    NameSource? nameSource,
   }) => TaskStatus(
     id: id ?? this.id,
     name: name ?? this.name,
     colorValue: colorValue ?? this.colorValue,
     completed: completed ?? this.completed,
     sortOrder: sortOrder ?? this.sortOrder,
+    nameSource: nameSource ?? this.nameSource,
   );
 
   factory TaskStatus.fromMap(Map<String, Object?> map) => TaskStatus(
@@ -47,6 +56,7 @@ class TaskStatus {
     colorValue: map['color_value']! as int,
     completed: (map['completed']! as int) == 1,
     sortOrder: map['sort_order']! as int,
+    nameSource: nameSourceFromName(map['name_source'] as String?),
   );
 
   Map<String, Object?> toMap() => {
@@ -55,6 +65,7 @@ class TaskStatus {
     'color_value': colorValue,
     'completed': completed ? 1 : 0,
     'sort_order': sortOrder,
+    'name_source': nameSource.name,
   };
 }
 
@@ -98,6 +109,7 @@ class TaskTagDefinition {
     required this.colorValue,
     required this.iconName,
     required this.sortOrder,
+    this.nameSource = NameSource.user,
   });
 
   final String id;
@@ -105,6 +117,7 @@ class TaskTagDefinition {
   final int colorValue;
   final String iconName;
   final int sortOrder;
+  final NameSource nameSource;
 
   Color get color => Color(colorValue);
   IconData get icon => taskTagIcons[iconName] ?? Icons.label_outline;
@@ -116,12 +129,14 @@ class TaskTagDefinition {
     int? colorValue,
     String? iconName,
     int? sortOrder,
+    NameSource? nameSource,
   }) => TaskTagDefinition(
     id: id,
     name: name ?? this.name,
     colorValue: colorValue ?? this.colorValue,
     iconName: iconName ?? this.iconName,
     sortOrder: sortOrder ?? this.sortOrder,
+    nameSource: nameSource ?? this.nameSource,
   );
 
   factory TaskTagDefinition.fromMap(Map<String, Object?> map) =>
@@ -131,6 +146,7 @@ class TaskTagDefinition {
         colorValue: map['color_value']! as int,
         iconName: map['icon_name']! as String,
         sortOrder: map['sort_order']! as int,
+        nameSource: nameSourceFromName(map['name_source'] as String?),
       );
 
   Map<String, Object?> toMap() => {
@@ -139,6 +155,7 @@ class TaskTagDefinition {
     'color_value': colorValue,
     'icon_name': iconName,
     'sort_order': sortOrder,
+    'name_source': nameSource.name,
   };
 }
 
@@ -234,6 +251,7 @@ class CategoryDefinition {
     required this.colorValue,
     required this.iconName,
     required this.sortOrder,
+    this.nameSource = NameSource.user,
   });
 
   final String id;
@@ -241,6 +259,7 @@ class CategoryDefinition {
   final int colorValue;
   final String iconName;
   final int sortOrder;
+  final NameSource nameSource;
 
   Color get color => Color(colorValue);
   IconData get icon => taskTagIcons[iconName] ?? Icons.folder_outlined;
@@ -250,12 +269,14 @@ class CategoryDefinition {
     int? colorValue,
     String? iconName,
     int? sortOrder,
+    NameSource? nameSource,
   }) => CategoryDefinition(
     id: id,
     name: name ?? this.name,
     colorValue: colorValue ?? this.colorValue,
     iconName: iconName ?? this.iconName,
     sortOrder: sortOrder ?? this.sortOrder,
+    nameSource: nameSource ?? this.nameSource,
   );
 
   factory CategoryDefinition.fromMap(Map<String, Object?> map) =>
@@ -265,6 +286,7 @@ class CategoryDefinition {
         colorValue: map['color_value']! as int,
         iconName: map['icon_name']! as String,
         sortOrder: map['sort_order']! as int,
+        nameSource: nameSourceFromName(map['name_source'] as String?),
       );
 
   Map<String, Object?> toMap() => {
@@ -273,6 +295,7 @@ class CategoryDefinition {
     'color_value': colorValue,
     'icon_name': iconName,
     'sort_order': sortOrder,
+    'name_source': nameSource.name,
   };
 }
 
@@ -329,6 +352,8 @@ class ProgressNode {
     required this.colorValue,
     required this.kind,
     required this.sortOrder,
+    this.sourceNodeId,
+    this.nameSource = NameSource.user,
   });
 
   final String id;
@@ -336,6 +361,8 @@ class ProgressNode {
   final int colorValue;
   final ProgressNodeKind kind;
   final int sortOrder;
+  final String? sourceNodeId;
+  final NameSource nameSource;
 
   Color get color => Color(colorValue);
   bool get completed => kind == ProgressNodeKind.end;
@@ -345,12 +372,16 @@ class ProgressNode {
     int? colorValue,
     ProgressNodeKind? kind,
     int? sortOrder,
+    String? sourceNodeId,
+    NameSource? nameSource,
   }) => ProgressNode(
     id: id,
     name: name ?? this.name,
     colorValue: colorValue ?? this.colorValue,
     kind: kind ?? this.kind,
     sortOrder: sortOrder ?? this.sortOrder,
+    sourceNodeId: sourceNodeId ?? this.sourceNodeId,
+    nameSource: nameSource ?? this.nameSource,
   );
 }
 
@@ -360,22 +391,26 @@ class ProgressTemplate {
     required this.name,
     required this.sortOrder,
     required this.nodes,
+    this.nameSource = NameSource.user,
   });
 
   final String id;
   final String name;
   final int sortOrder;
   final List<ProgressNode> nodes;
+  final NameSource nameSource;
 
   ProgressTemplate copyWith({
     String? name,
     int? sortOrder,
     List<ProgressNode>? nodes,
+    NameSource? nameSource,
   }) => ProgressTemplate(
     id: id,
     name: name ?? this.name,
     sortOrder: sortOrder ?? this.sortOrder,
     nodes: nodes ?? this.nodes,
+    nameSource: nameSource ?? this.nameSource,
   );
 }
 
@@ -564,11 +599,13 @@ class ProgressSnapshot {
     required this.currentNodeId,
     required this.nodes,
     this.sourceTemplateId,
+    this.templateNameSource = NameSource.user,
   });
 
   final String instanceId;
   final String? sourceTemplateId;
   final String templateName;
+  final NameSource templateNameSource;
   final String currentNodeId;
   final List<ProgressNode> nodes;
 
@@ -585,6 +622,7 @@ class ProgressSnapshot {
     instanceId: instanceId,
     sourceTemplateId: sourceTemplateId,
     templateName: templateName,
+    templateNameSource: templateNameSource,
     currentNodeId: currentNodeId ?? this.currentNodeId,
     nodes: nodes,
   );
@@ -1146,6 +1184,7 @@ class PlanItem {
     this.reminderEnabled = false,
     this.reminders = const [],
     this.contacts = const [],
+    this.sourceCategoryId,
   });
   final String id;
   final String name;
@@ -1153,6 +1192,7 @@ class PlanItem {
   final String startDate;
   final String targetDate;
   final String categoryName;
+  final String? sourceCategoryId;
   final int categoryColorValue;
   final String categoryIconName;
   final List<TaskTagSnapshot> tags;
@@ -1172,6 +1212,7 @@ class PlanItem {
     String? startDate,
     String? targetDate,
     String? categoryName,
+    String? sourceCategoryId,
     int? categoryColorValue,
     String? categoryIconName,
     List<TaskTagSnapshot>? tags,
@@ -1192,6 +1233,7 @@ class PlanItem {
     startDate: startDate ?? this.startDate,
     targetDate: targetDate ?? this.targetDate,
     categoryName: categoryName ?? this.categoryName,
+    sourceCategoryId: sourceCategoryId ?? this.sourceCategoryId,
     categoryColorValue: categoryColorValue ?? this.categoryColorValue,
     categoryIconName: categoryIconName ?? this.categoryIconName,
     tags: tags ?? this.tags,
@@ -1257,6 +1299,8 @@ class AppPreferences {
     },
     this.defaultReminderMinutes = -1,
     this.reminderSound = true,
+    this.requireAuthenticationOnLaunch = false,
+    this.requireAuthenticationForExport = true,
   });
 
   static const double minimumCalendarRowHeight = 62;
@@ -1279,19 +1323,14 @@ class AppPreferences {
   final Set<PlanCompletionStyle> quadrantCompletionStyles;
   final int defaultReminderMinutes;
   final bool reminderSound;
+  final bool requireAuthenticationOnLaunch;
+  final bool requireAuthenticationForExport;
 
   double get calendarRowHeight => switch (calendarDensity) {
     'small' => calendarSmallHeight,
     'large' => calendarLargeHeight,
     _ => calendarMediumHeight,
   };
-
-  static int estimatedCalendarItemCount(double height) {
-    final count = ((height - 62) / 20).floor();
-    if (count < 0) return 0;
-    if (count > 9) return 9;
-    return count;
-  }
 
   AppPreferences copyWith({
     String? theme,
@@ -1308,6 +1347,8 @@ class AppPreferences {
     Set<PlanCompletionStyle>? quadrantCompletionStyles,
     int? defaultReminderMinutes,
     bool? reminderSound,
+    bool? requireAuthenticationOnLaunch,
+    bool? requireAuthenticationForExport,
   }) => AppPreferences(
     theme: theme ?? this.theme,
     followSystemFontScale: followSystemFontScale ?? this.followSystemFontScale,
@@ -1328,5 +1369,9 @@ class AppPreferences {
     defaultReminderMinutes:
         defaultReminderMinutes ?? this.defaultReminderMinutes,
     reminderSound: reminderSound ?? this.reminderSound,
+    requireAuthenticationOnLaunch:
+        requireAuthenticationOnLaunch ?? this.requireAuthenticationOnLaunch,
+    requireAuthenticationForExport:
+        requireAuthenticationForExport ?? this.requireAuthenticationForExport,
   );
 }

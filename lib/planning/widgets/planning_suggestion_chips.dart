@@ -32,7 +32,7 @@ class PlanningSuggestionChips extends StatelessWidget {
       children: [
         ActionChip(
           avatar: const Icon(Icons.event_outlined, size: 18),
-          label: Text(
+          label: RawText(
             schedule.hasDate
                 ? strings.planningScheduleDate(schedule.localDate)
                 : strings.planningSetScheduleDate,
@@ -41,7 +41,7 @@ class PlanningSuggestionChips extends StatelessWidget {
         ),
         ActionChip(
           avatar: const Icon(Icons.schedule_outlined, size: 18),
-          label: Text(
+          label: RawText(
             schedule.hasTime
                 ? strings.planningScheduleTime(schedule.localTime)
                 : strings.planningSetScheduleTime,
@@ -51,24 +51,24 @@ class PlanningSuggestionChips extends StatelessWidget {
         if (schedule.hasTime)
           ActionChip(
             avatar: const Icon(Icons.schedule_outlined, size: 18),
-            label: Text(strings.planningRemoveScheduleTime),
+            label: RawText(strings.planningRemoveScheduleTime),
             onPressed: onClearTime,
           ),
         if (schedule.hasDate)
           ActionChip(
             avatar: const Icon(Icons.event_busy_outlined, size: 18),
-            label: Text(strings.planningRemoveSchedule),
+            label: RawText(strings.planningRemoveSchedule),
             onPressed: onClearSchedule,
           ),
         if (proposal.reminders.intent == ReminderDraftIntent.unspecified)
           Chip(
             avatar: const Icon(Icons.notifications_none, size: 18),
-            label: Text(strings.planningReminderUseDefault),
+            label: RawText(strings.planningReminderUseDefault),
           ),
         if (proposal.reminders.intent == ReminderDraftIntent.explicitlyNone)
           Chip(
             avatar: const Icon(Icons.notifications_off_outlined, size: 18),
-            label: Text(strings.planningReminderNone),
+            label: RawText(strings.planningReminderNone),
           ),
         if (proposal.reminders.intent == ReminderDraftIntent.specified)
           ...proposal.reminders.values.map(
@@ -79,21 +79,18 @@ class PlanningSuggestionChips extends StatelessWidget {
                     : Icons.notifications_none,
                 size: 18,
               ),
-              label: Text(_reminderLabel(context, reminder)),
-              tooltip: localizeUiText(
-                context,
-                strings.planningRemoveReminderTooltip,
-              ),
+              label: RawText(_reminderLabel(context, reminder)),
+              tooltip: strings.planningRemoveReminderTooltip,
               onPressed: onRemoveReminders,
             ),
           ),
         ...proposal.tags.map(
           (tag) => Semantics(
-            label: localizeUiText(context, strings.planningTagSemantics(tag)),
+            label: strings.planningTagSemantics(tag),
             child: ExcludeSemantics(
               child: Chip(
                 avatar: const Icon(Icons.label_outline, size: 18),
-                label: Text('#$tag'),
+                label: RawText('#$tag'),
               ),
             ),
           ),

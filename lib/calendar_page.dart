@@ -1437,7 +1437,6 @@ class _CalendarWeekRow extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final completionStyles =
         controller.preferences.calendarMonthCompletionStyles;
-    final planLimit = AppPreferences.estimatedCalendarItemCount(height);
     final markerSize = (height - 6).clamp(14, 25).toDouble();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1468,102 +1467,114 @@ class _CalendarWeekRow extends StatelessWidget {
                   top: BorderSide(color: Theme.of(context).dividerColor),
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Align(
-                    alignment: Alignment.topCenter,
-                    child: Container(
-                      width: markerSize,
-                      height: markerSize,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: today
-                            ? Theme.of(context).colorScheme.primary
-                            : null,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        '$day',
-                        style: TextStyle(
-                          color: today
-                              ? Theme.of(context).colorScheme.onPrimary
-                              : null,
-                          fontSize: markerSize < 20
-                              ? 9
-                              : plans.isEmpty
-                              ? 15
-                              : 12,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final planLimit = _calendarPlanLimitForHeight(
+                    context: context,
+                    plans: plans,
+                    availableHeight: constraints.maxHeight,
+                    markerSize: markerSize,
+                  );
+                  final hiddenPlanCount = plans.length - planLimit;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Align(
+                        alignment: Alignment.topCenter,
+                        child: Container(
+                          width: markerSize,
+                          height: markerSize,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: today
+                                ? Theme.of(context).colorScheme.primary
+                                : null,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            '$day',
+                            style: TextStyle(
+                              color: today
+                                  ? Theme.of(context).colorScheme.onPrimary
+                                  : null,
+                              fontSize: markerSize < 20
+                                  ? 9
+                                  : plans.isEmpty
+                                  ? 15
+                                  : 12,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  if (planLimit == 0 && plans.isNotEmpty && height >= 32)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 3),
-                      child: Align(
-                        alignment: Alignment.center,
-                        child: Wrap(
-                          spacing: 3,
-                          children: plans.take(4).map((plan) {
-                            final color =
-                                plan.progress.currentNode?.color ??
-                                Color(plan.categoryColorValue);
-                            return Container(
-                              width: 5,
-                              height: 5,
-                              decoration: BoxDecoration(
-                                color: color,
-                                shape: BoxShape.circle,
-                              ),
+                      if (planLimit == 0 && plans.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Align(
+                            alignment: Alignment.center,
+                            child: Wrap(
+                              spacing: 3,
+                              children: plans.take(4).map((plan) {
+                                final color =
+                                    plan.progress.currentNode?.color ??
+                                    Color(plan.categoryColorValue);
+                                return Container(
+                                  width: 5,
+                                  height: 5,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+                      ...plans.take(planLimit).map((plan) {
+                        final color =
+                            plan.progress.currentNode?.color ??
+                            Color(plan.categoryColorValue);
+                        final completed = plan.progress.completed;
+                        final showBorder =
+                            completed &&
+                            completionStyles.contains(
+                              PlanCompletionStyle.border,
                             );
-                          }).toList(),
+                        return Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(top: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 2,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: color.withAlpha(30),
+                            border: showBorder
+                                ? Border.all(
+                                    color: colorScheme.onSurfaceVariant
+                                        .withAlpha(120),
+                                    width: .8,
+                                  )
+                                : null,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: _CalendarPlanLabel(
+                            plan: plan,
+                            style: const TextStyle(fontSize: 8),
+                            completionStyles: completionStyles,
+                          ),
+                        );
+                      }),
+                      if (hiddenPlanCount > 0)
+                        Align(
+                          alignment: Alignment.center,
+                          child: Text(
+                            '+$hiddenPlanCount 项',
+                            style: const TextStyle(fontSize: 8),
+                          ),
                         ),
-                      ),
-                    ),
-                  ...plans.take(planLimit).map((plan) {
-                    final color =
-                        plan.progress.currentNode?.color ??
-                        Color(plan.categoryColorValue);
-                    final completed = plan.progress.completed;
-                    final showBorder =
-                        completed &&
-                        completionStyles.contains(PlanCompletionStyle.border);
-                    return Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(top: 3),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 2,
-                        vertical: 1,
-                      ),
-                      decoration: BoxDecoration(
-                        color: color.withAlpha(30),
-                        border: showBorder
-                            ? Border.all(
-                                color: colorScheme.onSurfaceVariant.withAlpha(
-                                  120,
-                                ),
-                                width: .8,
-                              )
-                            : null,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: _CalendarPlanLabel(
-                        plan: plan,
-                        style: const TextStyle(fontSize: 8),
-                        completionStyles: completionStyles,
-                      ),
-                    );
-                  }),
-                  if (plans.length > planLimit && height >= 42)
-                    Align(
-                      alignment: Alignment.center,
-                      child: Text(
-                        '+${plans.length - planLimit} 项',
-                        style: const TextStyle(fontSize: 8),
-                      ),
-                    ),
-                ],
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -1571,6 +1582,62 @@ class _CalendarWeekRow extends StatelessWidget {
       }),
     );
   }
+}
+
+int _calendarPlanLimitForHeight({
+  required BuildContext context,
+  required List<PlanItem> plans,
+  required double availableHeight,
+  required double markerSize,
+}) {
+  if (plans.isEmpty) return 0;
+
+  const planStyle = TextStyle(fontSize: 8);
+  final textStyle = DefaultTextStyle.of(context).style.merge(planStyle);
+  final textScaler = MediaQuery.textScalerOf(context);
+  final textDirection = Directionality.of(context);
+  final locale = Localizations.maybeLocaleOf(context);
+
+  double textHeight(String text, {bool localize = true}) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: localize ? localizeUiText(context, text) : text,
+        style: textStyle,
+      ),
+      maxLines: 1,
+      textDirection: textDirection,
+      textScaler: textScaler,
+      locale: locale,
+    )..layout();
+    final height = painter.height;
+    painter.dispose();
+    return height;
+  }
+
+  final contentHeight = (availableHeight - markerSize)
+      .clamp(0.0, double.infinity)
+      .toDouble();
+  final planHeights = plans
+      .map((plan) => textHeight(plan.name, localize: false) + 5)
+      .toList(growable: false);
+  final totalPlanHeight = planHeights.fold(0.0, (sum, item) => sum + item);
+  if (totalPlanHeight <= contentHeight) return plans.length;
+
+  var visiblePlanHeight = 0.0;
+  var visiblePlanCount = 0;
+  for (var index = 0; index < plans.length; index++) {
+    final nextVisibleCount = index + 1;
+    final hiddenCount = plans.length - nextVisibleCount;
+    if (hiddenCount == 0) break;
+    final requiredHeight =
+        visiblePlanHeight +
+        planHeights[index] +
+        textHeight('+$hiddenCount 项');
+    if (requiredHeight > contentHeight) break;
+    visiblePlanHeight += planHeights[index];
+    visiblePlanCount = nextVisibleCount;
+  }
+  return visiblePlanCount;
 }
 
 class _CalendarPlanLabel extends StatelessWidget {
@@ -1607,7 +1674,7 @@ class _CalendarPlanLabel extends StatelessWidget {
           ? 0.75
           : baseTextStyle.decorationThickness,
     );
-    final label = Text(
+    final label = RawText(
       plan.name,
       textAlign: TextAlign.start,
       maxLines: 1,
