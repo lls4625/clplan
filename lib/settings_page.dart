@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart' hide Text;
+import 'package:flutter/services.dart';
 
 import 'app_controller.dart';
 import 'contact_widgets.dart';
@@ -9,6 +10,7 @@ import 'l10n/ui_text.dart';
 import 'models.dart';
 import 'notification_service.dart';
 import 'security/app_security_service.dart';
+import 'settings_information.dart';
 import 'ui/app_alert.dart';
 import 'ui/glass_bottom_navigation.dart';
 import 'xlsx_service.dart';
@@ -179,10 +181,45 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
           _SettingsMenuItem(
-            icon: Icons.shield_outlined,
-            title: '隐私与本地存储',
-            subtitle: '数据边界与本地存储说明',
-            onTap: () => _openDetail(context, '隐私与数据', _privacyDetail),
+            icon: Icons.storage_outlined,
+            title: settingsInformationLabel(context, '数据存储与删除'),
+            onTap: () => _openInformation(
+              context,
+              '数据存储与删除',
+              SettingsInformationPage.data,
+            ),
+          ),
+          _SettingsMenuItem(
+            icon: Icons.admin_panel_settings_outlined,
+            title: settingsInformationLabel(context, '权限说明'),
+            onTap: () => _openInformation(
+              context,
+              '权限说明',
+              SettingsInformationPage.permissions,
+            ),
+          ),
+        ],
+      ),
+      _SettingsSection(
+        title: settingsInformationLabel(context, '隐私与条款'),
+        children: [
+          _SettingsMenuItem(
+            icon: Icons.privacy_tip_outlined,
+            title: settingsInformationLabel(context, '隐私政策'),
+            onTap: () => _openInformation(
+              context,
+              '隐私政策',
+              SettingsInformationPage.privacy,
+            ),
+          ),
+          _SettingsMenuItem(
+            icon: Icons.article_outlined,
+            title: settingsInformationLabel(context, '使用条款'),
+            onTap: () => _openInformation(
+              context,
+              '使用条款',
+              SettingsInformationPage.terms,
+            ),
           ),
         ],
       ),
@@ -190,21 +227,70 @@ class SettingsPage extends StatelessWidget {
         title: '支持与关于',
         children: [
           _SettingsMenuItem(
+            icon: Icons.star_border,
+            title: '给个好评',
+            subtitle: '前往 App Store 评价 ClPlan',
+            onTap: () => _openAppReviewPage(context),
+          ),
+          _SettingsMenuItem(
             icon: Icons.volunteer_activism_outlined,
             title: context.l10n.tipMenuTitle,
             subtitle: context.l10n.tipMenuSubtitle,
             onTap: () => showDeveloperTipPage(context, developerTipController),
           ),
           _SettingsMenuItem(
+            icon: Icons.mail_outline,
+            title: settingsInformationLabel(context, '联系与反馈'),
+            onTap: () => _openInformation(
+              context,
+              '联系与反馈',
+              SettingsInformationPage.contact,
+            ),
+          ),
+          _SettingsMenuItem(
             icon: Icons.info_outline,
-            title: '关于 ClPlan',
-            subtitle: '应用信息与赞赏',
-            onTap: () => _openDetail(context, '关于', _aboutDetail),
+            title: settingsInformationLabel(context, '关于 ClPlan'),
+            onTap: () => _openDetail(
+              context,
+              settingsInformationLabel(context, '关于 ClPlan'),
+              (_) => const SettingsAboutContent(),
+            ),
           ),
         ],
       ),
     ],
   );
+
+  Future<void> _openInformation(
+    BuildContext context,
+    String title,
+    SettingsInformationPage page,
+  ) => _openDetail(
+    context,
+    settingsInformationLabel(context, title),
+    (_) => SettingsInformationContent(page: page),
+  );
+
+  Future<void> _openAppReviewPage(BuildContext context) async {
+    var opened = false;
+    try {
+      opened =
+          await const MethodChannel('vip.ichiki.javalee.clplan/app_review')
+              .invokeMethod<bool>('openAppReviewPage') ??
+          false;
+    } on PlatformException {
+      opened = false;
+    } on MissingPluginException {
+      opened = false;
+    }
+    if (!opened && context.mounted) {
+      showAppAlert(
+        context,
+        title: '给个好评',
+        message: '暂时无法打开评价页面，请稍后重试',
+      );
+    }
+  }
 
   Future<void> _openDetail(
     BuildContext context,
@@ -737,31 +823,6 @@ class SettingsPage extends StatelessWidget {
       ],
     );
   }
-
-  Widget _privacyDetail(BuildContext context) => const _Panel(
-    title: '本地数据与隐私',
-    children: [
-      Text('数据保存在设备 SQLite 数据库中，不连接云端。计划关联只保存 ID，不读取系统通讯录；一致性由应用逻辑维护。'),
-    ],
-  );
-
-  Widget _aboutDetail(BuildContext context) => _Panel(
-    title: '关于应用',
-    children: [
-      const Text('离线优先的个人计划应用。联系人均为手动文本，不读取系统通讯录。'),
-      const SizedBox(height: 12),
-      Wrap(
-        spacing: 8,
-        children: [
-          OutlinedButton(
-            onPressed: () =>
-                showDeveloperTipPage(context, developerTipController),
-            child: Text(context.l10n.tipMenuTitle),
-          ),
-        ],
-      ),
-    ],
-  );
 
   Future<void> _showPlanExport(BuildContext context) async =>
       showModalBottomSheet<void>(
@@ -1309,15 +1370,15 @@ class _SettingsMenuItem extends StatelessWidget {
   const _SettingsMenuItem({
     required this.icon,
     required this.title,
-    required this.subtitle,
     required this.onTap,
+    this.subtitle,
     this.trailingIcon = Icons.chevron_right,
     this.subtitleWidget,
   });
 
   final IconData icon;
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final VoidCallback onTap;
   final IconData trailingIcon;
   final Widget? subtitleWidget;
@@ -1343,12 +1404,14 @@ class _SettingsMenuItem extends StatelessWidget {
       ),
       subtitle:
           subtitleWidget ??
-          Text(
-            subtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          (subtitle == null
+              ? null
+              : Text(
+                  subtitle!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                )),
       trailing: Icon(trailingIcon, color: colors.primary),
       onTap: onTap,
     );

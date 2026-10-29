@@ -290,6 +290,9 @@ String _monthName(int month) => const [
 ][month - 1];
 
 const Map<String, String> _english = {
+  '给个好评': 'Rate the app',
+  '前往 App Store 评价 ClPlan': 'Review ClPlan on the App Store',
+  '暂时无法打开评价页面，请稍后重试': 'Unable to open the review page. Please try again later.',
   '计划': 'Plans',
   '任务': 'Tasks',
   '日历': 'Calendar',
@@ -653,6 +656,9 @@ const Map<String, String> _english = {
 };
 
 const Map<String, String> _japanese = {
+  '给个好评': 'アプリを評価',
+  '前往 App Store 评价 ClPlan': 'App Store で ClPlan を評価',
+  '暂时无法打开评价页面，请稍后重试': '評価ページを開けません。しばらくしてからもう一度お試しください。',
   '计划': '計画',
   '任务': 'タスク',
   '日历': 'カレンダー',
@@ -1015,6 +1021,9 @@ const Map<String, String> _japanese = {
 };
 
 const Map<String, String> _korean = {
+  '给个好评': '앱 평가하기',
+  '前往 App Store 评价 ClPlan': 'App Store에서 ClPlan 평가하기',
+  '暂时无法打开评价页面，请稍后重试': '평가 페이지를 열 수 없습니다. 나중에 다시 시도해 주세요.',
   '计划': '계획',
   '任务': '작업',
   '日历': '캘린더',
@@ -1378,6 +1387,9 @@ const Map<String, String> _korean = {
 };
 
 const Map<String, String> _traditionalChinese = {
+  '给个好评': '給個好評',
+  '前往 App Store 评价 ClPlan': '前往 App Store 評價 ClPlan',
+  '暂时无法打开评价页面，请稍后重试': '暫時無法開啟評價頁面，請稍後重試',
   '简体中文': '簡體中文',
   '繁體中文': '繁體中文',
   '安全锁': '安全鎖',

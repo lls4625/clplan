@@ -10,6 +10,8 @@ import SwiftUI
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var alarmKitBridge: AlarmKitBridge?
   private var developerTipPurchase: DeveloperTipPurchase?
+  private var appReviewBridge: AppReviewBridge?
+  private var appInfoBridge: AppInfoBridge?
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -26,6 +28,58 @@ import SwiftUI
     developerTipPurchase = DeveloperTipPurchase(
       messenger: engineBridge.applicationRegistrar.messenger()
     )
+    appReviewBridge = AppReviewBridge(
+      messenger: engineBridge.applicationRegistrar.messenger()
+    )
+    appInfoBridge = AppInfoBridge(
+      messenger: engineBridge.applicationRegistrar.messenger()
+    )
+  }
+}
+
+private final class AppInfoBridge {
+  private let channel: FlutterMethodChannel
+
+  init(messenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(
+      name: "vip.ichiki.javalee.clplan/app_info",
+      binaryMessenger: messenger
+    )
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "getAppInfo" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result([
+        "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+        "build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+      ])
+    }
+  }
+}
+
+private final class AppReviewBridge {
+  private static let appStoreAppID = "6827856322"
+  private let channel: FlutterMethodChannel
+
+  init(messenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(
+      name: "vip.ichiki.javalee.clplan/app_review",
+      binaryMessenger: messenger
+    )
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "openAppReviewPage" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let url = URL(
+        string: "https://apps.apple.com/app/id\(Self.appStoreAppID)?action=write-review"
+      ) else {
+        result(false)
+        return
+      }
+      UIApplication.shared.open(url, options: [:]) { opened in result(opened) }
+    }
   }
 }
 
